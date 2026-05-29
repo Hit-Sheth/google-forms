@@ -1,0 +1,64 @@
+====================================================================================================
+Bits:
+c = Integer.bitCount(6)=2 //number of 1's 110=2
+
+====================================================================================================
+Map:
+   HashMap:
+      Map<Integer,Integer> a = new HashMap<>();    // O(1) + O(n)
+a.containsKey(k) -- > true false
+a.put(k,a.getOrDefault(k,0)+1);
+a.remove(k);
+a.isEmpty() -- > true false
+
+====================================================================================================
+StringBuilder:
+StringBuilder ans = new StringBuilder();
+ans.append('0');
+ans.toString()
+
+
+====================================================================================================
+ArrayList:
+List<Integer> z = new ArrayList<>();
+z.add(i);
+
+====================================================================================================
+Satck:
+Stack<Integer> s = new Stack<>();
+s.pop();
+s.push(i);
+s.empty()	-- > true false
+s.peek(); 
+
+====================================================================================================
+Queue:
+	ArrayDeque:
+		Queue<TreeNode> q = new ArrayDeque<>();
+q.offer();
+q.poll(); --> first element
+q.isEmpty();	-- > true false
+// peek remove offer
+ 
+====================================================================================================
+sorting comparetor:
+	int[]:
+		Integer[] box = Arrays.stream(arr).boxed().toArray(Integer[]::new);
+        Arrays.sort(box,new Comparator<Integer>() {
+            public int compare(Integer a,Integer b){
+                return a-b; //assending
+            }
+        });
+        return Arrays.stream(box).mapToInt(Integer::intValue).toArray();
+		
+====================================================================================================
+
+Stringbuilder:
+	StringBuilder s = new StringBuilder(s1);
+	s.setCharAt(i,'1');
+	s.charAt(i);
+====================================================================================================
+
+
+
+KGAT_b708649838a164a2ebdda9c37b795c99
