@@ -140,10 +140,10 @@ export async function POST(req, { params }) {
         .lean(),
     ]);
 
-    // await Promise.allSettled([
-    //   sendAdminNotification(form, populatedSubmission || submission),
-    //   submitter?.email ? sendUserConfirmation(submitter.email, form, validatedAnswers) : Promise.resolve(),
-    // ]);
+    await Promise.allSettled([
+      sendAdminNotification(form, populatedSubmission || submission),
+      submitter?.email ? sendUserConfirmation(submitter.email, form, validatedAnswers) : Promise.resolve(),
+    ]);
 
     // Return success response
     
