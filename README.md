@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Google Forms Clone (Custom Form Builder)
 
-## Getting Started
+A full-stack, real-time application for creating, managing, and filling out custom online forms, inspired by Google Forms. This project features role-based access control,a form builder, live response tracking, file uploads, and email notifications.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Role-Based Access Control**: Separate dashboards for Admins, Employees, and Customers.
+- **Dynamic Form Builder**: Create forms with various input types (text, multiple choice, file uploads, integer fields,     Dropdown, checkbox).
+- **Real-Time Updates**: Instant form response syncing across clients using Socket.io.
+- **File Uploads**: Easily upload and manage file attachments for form submissions.
+- **Authentication**: Secure JWT-based authentication system.
+- **Email Notifications**: Automated email alerts for form submissions or registration events via Nodemailer.
+- **Google API Integration**: Connectivity to Google services using `googleapis`.
+
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js (App Router)](https://nextjs.org/)
+- **Frontend**: React, CSS Modules / Globals, Lucide React (Icons)
+- **Backend**: Node.js custom server (Express/Next API Routes)
+- **Database**: MongoDB with [Mongoose](https://mongoosejs.com/)
+- **Real-time Engine**: [Socket.io](https://socket.io/)
+- **Authentication**: JWT (JSON Web Tokens), bcryptjs, jose
+- **Mailing**: Nodemailer
+
+## 📁 Project Structure
+
+```text
+src/
+├── app/             # Next.js App Router (Pages & API routes)
+│   ├── admin/       # Admin dashboards and form management
+│   ├── api/         # Backend API endpoints (auth, forms, uploads, admin, customer.)
+│   ├── customer/    # Customer dashboard
+│   ├── employee/    # Employee dashboard and response handling
+│   └── forms/       # Public/Shared form viewing interfaces
+├── components/      # Reusable UI components (e.g., FormBuilder, Header)
+├── lib/             # Utility and config files (auth, db connection, email, socket)
+└── models/          # Mongoose database schemas (Form, Response, User)
+public/uploads/      # Directory for user-uploaded files
+server.js            # Custom Node.js server entry point (for Next.js + Socket.io integration)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## ⚙️ Prerequisites
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+- **Node.js** (v18+ recommended)
+- **MongoDB** (Local or Atlas)
+- **npm** or **yarn**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔧 Installation & Setup
 
-## Learn More
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone <repository-url>
+   cd google-forms
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Configure Environment Variables**:
+   Create a `.local.env` or `.env` file in the root directory and add the necessary variables:
+   ```env
+   MONGODB_URI=mongodb://localhost:27017/google-forms
+   JWT_SECRET=your_super_secret_jwt_key
+   EMAIL_USER=your_email@gmail.com
+   EMAIL_PASS=your_email_app_password
+   # Add any required Google API keys here
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Run the Application**:
+   This project uses a custom server (`server.js`) to handle Next.js and Socket.io simultaneously.
+   ```bash
+   npm run dev
+   ```
 
-## Deploy on Vercel
+5. **Open the App**:
+   Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📦 Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` - Starts the development server using the custom `node server.js`
+- `npm run build` - Builds the application for production (`next build`)
+- `npm start` - Starts the production server using `node server.js`
+- `npm run lint` - Runs ESLint to check for code issues
