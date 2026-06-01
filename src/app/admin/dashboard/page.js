@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Link from 'next/link';
-import { Plus, Edit2, FileText, CheckCircle, XCircle, Users, Trash2, Calendar } from 'lucide-react';
+import { Plus, Edit2, FileText, Users, Trash2, Calendar } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [forms, setForms] = useState([]);
@@ -90,7 +90,7 @@ export default function AdminDashboard() {
             <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.4, color: 'var(--primary)' }} />
             <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text)', marginBottom: '8px' }}>No forms created yet</h3>
             <p style={{ fontSize: '0.875rem', marginBottom: '1.5rem', maxWidth: '320px', margin: '0 auto 1.5rem' }}>
-              Create your very first customizable, dynamic form to start collecting responses from customers!
+              Create your very first customizable, dynamic form to start collecting responses!
             </p>
             <Link href="/admin/forms/new" className="btn btn-primary">
               <Plus size={16} />
@@ -124,17 +124,17 @@ export default function AdminDashboard() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <FileText size={14} />
-                      {form.questions.length} questions
+                      {(form?.sections?.reduce((acc, s) => acc + (s?.questions?.length ?? 0), 0) ?? 0)} questions
                     </span>
 
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <Users size={14} />
-                      {form.allowedEmployees.length} staff allowed
+                      {(form?.allowedEmployees?.length ?? 0)} staff allowed
                     </span>
 
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <Calendar size={14} />
-                      {new Date(form.createdAt).toLocaleDateString()}
+                      {form?.createdAt ? new Date(form.createdAt).toLocaleDateString() : '—'}
                     </span>
                   </div>
                 </div>

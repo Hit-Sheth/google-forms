@@ -34,6 +34,15 @@ const QuestionSchema = new mongoose.Schema({
   },
 });
 
+const SectionSchema = new mongoose.Schema(
+  {
+    id: { type: Number },
+    title: String,
+    description: String,
+    questions: [QuestionSchema],
+  },
+);
+
 const FormSchema = new mongoose.Schema(
   {
     title: {
@@ -50,10 +59,7 @@ const FormSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    questions: {
-      type: [QuestionSchema],
-      default: [],
-    },
+    sections: [SectionSchema],
     allowedEmployees: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
       default: [],

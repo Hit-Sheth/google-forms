@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, RefreshCw, AlertCircle, UploadCloud, File as FileIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle, RefreshCw, AlertCircle, UploadCloud, File as FileIcon, ChevronRight, ChevronLeft } from 'lucide-react';
 
 export default function FillFormPage({ params }) {
-  // `params` can be a Promise in some Next.js configurations. Safely unwrap it.
   const [id, setId] = useState(null);
+  
   useEffect(() => {
     let mounted = true;
     async function resolveParams() {
@@ -21,14 +21,18 @@ export default function FillFormPage({ params }) {
     resolveParams();
     return () => { mounted = false; };
   }, [params]);
+
   const [form, setForm] = useState(null);
   const [answers, setAnswers] = useState({});
-  const [files, setFiles] = useState({}); // To hold file objects
+  const [files, setFiles] = useState({}); 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [serverError, setServerError] = useState('');
+
+  // Pagination state for sections
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
   useEffect(() => {
     async function fetchForm() {
@@ -41,14 +45,17 @@ export default function FillFormPage({ params }) {
         setForm(data.form);
         
         const initialAnswers = {};
-        data.form.questions.forEach((q) => {
-          if (q.type === 'checkbox') {
-            initialAnswers[q.id] = [];
-          } else if (q.type === 'file') {
-            initialAnswers[q.id] = null; // For file URLs
-          } else {
-            initialAnswers[q.id] = '';
-          }
+        // Iterate through sections and their nested questions
+        data.form.sections?.forEach((section) => {
+          section.questions?.forEach((q) => {
+            if (q.type === 'checkbox') {
+              initialAnswers[q.id] = [];
+            } else if (q.type === 'file') {
+              initialAnswers[q.id] = null;
+            } else {
+              initialAnswers[q.id] = '';
+            }
+          });
         });
         setAnswers(initialAnswers);
       } catch (err) {
@@ -70,9 +77,8 @@ export default function FillFormPage({ params }) {
   }
 
   function handleFileChange(qId, file, question) {
-    if (!file) {
-      return; // User cancelled file selection
-    }
+    if (!file) return; 
+
     setErrors((prev) => ({ ...prev, [qId]: '' }));
 
     const maxFileSize = (question.maxFileSize || 10) * 1024 * 1024; // in bytes
@@ -99,15 +105,15 @@ export default function FillFormPage({ params }) {
     handleInputChange(qId, newVal);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setErrors({});
-    setServerError('');
-    setSubmitting(true);
+  // Validates ONLY the current active section before allowing "Next"
+  function validateCurrentSection() {
+    const currentSection = form.sections[currentSectionIndex];
+    if (!currentSection || !currentSection.questions) return true;
 
-    // --- Client-side validation ---
     const validationErrors = {};
-    for (const q of form.questions) {
+    let isValid = true;
+
+    for (const q of currentSection.questions) {
       const val = answers[q.id];
       const file = files[q.id];
 
@@ -120,6 +126,7 @@ export default function FillFormPage({ params }) {
         }
         if (isMissing) {
           validationErrors[q.id] = 'This question is required';
+          isValid = false;
         }
       }
 
@@ -127,17 +134,48 @@ export default function FillFormPage({ params }) {
         const parsed = parseInt(val, 10);
         if (isNaN(parsed) || String(parsed) !== String(val).trim()) {
           validationErrors[q.id] = 'Please enter a valid whole number';
+          isValid = false;
         }
+      }
+      
+      // Keep existing file errors if they exist (size/type mismatch)
+      if (errors[q.id] && q.type === 'file' && !validationErrors[q.id]) {
+         validationErrors[q.id] = errors[q.id];
+         isValid = false;
       }
     }
 
-    if (Object.keys(validationErrors).length > 0) {
+    if (!isValid) {
       setErrors(validationErrors);
       const firstErrId = Object.keys(validationErrors)[0];
       document.getElementById(firstErrId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setSubmitting(false);
-      return;
     }
+
+    return isValid;
+  }
+
+  function handleNextSection() {
+    if (validateCurrentSection()) {
+      setCurrentSectionIndex((prev) => prev + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function handlePrevSection() {
+    setCurrentSectionIndex((prev) => Math.max(0, prev - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setServerError('');
+    
+    // Final check on the last section before submitting
+    if (!validateCurrentSection()) {
+       return;
+    }
+    
+    setSubmitting(true);
 
     // --- File Uploading ---
     const uploadedFileUrls = { ...answers };
@@ -145,7 +183,10 @@ export default function FillFormPage({ params }) {
       const file = files[qId];
       if (file) {
         try {
-          const question = form.questions.find(q => q.id === qId);
+          // Find the question across all sections
+          const question = form.sections.flatMap(s => s.questions || []).find(q => q.id === qId);
+          if (!question) continue;
+
           const formData = new FormData();
           formData.append('file', file);
           if (question.allowedFileTypes?.length > 0) {
@@ -164,9 +205,10 @@ export default function FillFormPage({ params }) {
           if (!res.ok) {
             throw new Error(data.error || 'File upload failed');
           }
-          uploadedFileUrls[qId] = data.url; // Store the URL
+          uploadedFileUrls[qId] = data.url; 
         } catch (err) {
-          setServerError(`Error uploading file for question: ${form.questions.find(q=>q.id === qId)?.label}. ${err.message}`);
+          const qLabel = form.sections.flatMap(s => s.questions || []).find(q=>q.id === qId)?.label;
+          setServerError(`Error uploading file for question: ${qLabel}. ${err.message}`);
           setSubmitting(false);
           return;
         }
@@ -230,11 +272,15 @@ export default function FillFormPage({ params }) {
     );
   }
 
+  const currentSection = form?.sections?.[currentSectionIndex];
+  const isLastSection = currentSectionIndex === (form?.sections?.length || 0) - 1;
+
   return (
     <>
       <Header />
       <main className="container" style={{ marginTop: '2rem', paddingBottom: '4rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '640px' }}>
+          
           <Link
             href="/customer/dashboard"
             className="btn btn-secondary"
@@ -258,7 +304,8 @@ export default function FillFormPage({ params }) {
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Main Form Title (Visible on all steps) */}
               <div className="card" style={{ borderTop: '8px solid var(--primary)', borderRadius: 'var(--radius-md)' }}>
                 <h1 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.5rem' }}>{form.title}</h1>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{form.description || 'No description provided.'}</p>
@@ -273,8 +320,29 @@ export default function FillFormPage({ params }) {
                   <span>{serverError}</span>
                 </div>
               )}
+              
+              {/* Progress Indicator */}
+              {form.sections?.length > 1 && (
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 4px' }}>
+                    <div style={{ flex: 1, height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                       <div style={{ height: '100%', width: `${((currentSectionIndex + 1) / form.sections.length) * 100}%`, background: 'var(--primary)', transition: 'width 0.3s ease' }}></div>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                       Section {currentSectionIndex + 1} of {form.sections.length}
+                    </span>
+                 </div>
+              )}
 
-              {form.questions.map((question) => {
+              {/* Current Section Title & Description (if any) */}
+              {currentSection && (currentSection.title || currentSection.description) && (
+                 <div style={{ marginBottom: '0.5rem', padding: '0 4px' }}>
+                    {currentSection.title && <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '4px' }}>{currentSection.title}</h2>}
+                    {currentSection.description && <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{currentSection.description}</p>}
+                 </div>
+              )}
+
+              {/* Render Questions for the Active Section */}
+              {currentSection?.questions?.map((question) => {
                 const error = errors[question.id];
                 return (
                   <div
@@ -431,15 +499,44 @@ export default function FillFormPage({ params }) {
                 );
               })}
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ alignSelf: 'flex-start', padding: '0.625rem 2rem', fontSize: '0.95rem', minWidth: '120px' }}
-                disabled={submitting}
-              >
-                {submitting ? 'Submitting...' : 'Submit Answers'}
-              </button>
-            </form>
+              {/* Navigation Controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
+                 {currentSectionIndex > 0 ? (
+                    <button
+                       type="button"
+                       onClick={handlePrevSection}
+                       className="btn btn-secondary"
+                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.625rem 1.25rem' }}
+                       disabled={submitting}
+                    >
+                       <ChevronLeft size={16} />
+                       <span>Back</span>
+                    </button>
+                 ) : <div></div> /* Empty div to push the next button to the right */}
+
+                 {isLastSection ? (
+                    <button
+                       type="button"
+                       onClick={handleSubmit}
+                       className="btn btn-primary"
+                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.625rem 2rem', fontSize: '0.95rem', minWidth: '140px', justifyContent: 'center' }}
+                       disabled={submitting}
+                    >
+                       {submitting ? 'Submitting...' : 'Submit Answers'}
+                    </button>
+                 ) : (
+                    <button
+                       type="button"
+                       onClick={handleNextSection}
+                       className="btn btn-primary"
+                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.625rem 1.25rem' }}
+                    >
+                       <span>Next</span>
+                       <ChevronRight size={16} />
+                    </button>
+                 )}
+              </div>
+            </div>
           )}
         </div>
       </main>

@@ -40,7 +40,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { title, description, questions, allowedEmployees } = await req.json();
+    const { title, description, sections, allowedEmployees, active } = await req.json();
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -50,8 +50,9 @@ export async function POST(req) {
       title,
       description: description || '',
       creator: user.userId,
-      questions: questions || [],
+      sections: sections || [],
       allowedEmployees: allowedEmployees || [],
+      active: typeof active === 'boolean' ? active : true,
     });
 
     return NextResponse.json({

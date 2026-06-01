@@ -9,13 +9,14 @@ export default function FormBuilder({ formId = null }) {
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [questions, setQuestions] = useState([]);
+  const [sections, setSections] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [allowedEmployees, setAllowedEmployees] = useState([]);
   const [loading, setLoading] = useState(!!formId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fileTypeInputs, setFileTypeInputs] = useState({});
+  const activeSectionId = sections[0]?.id;
 
   // Fetch employees list
   useEffect(() => {
@@ -47,7 +48,11 @@ export default function FormBuilder({ formId = null }) {
         
         setTitle(data.form.title);
         setDescription(data.form.description);
-        setQuestions(data.form.questions);
+        // If form uses sections, load them. Otherwise wrap legacy questions into one section.
+        const loadedSections = data.form.sections && data.form.sections.length > 0
+          ? data.form.sections
+          : [{ id: Date.now(), title: '', description: '', questions: data.form.questions || [] }];
+        setSections(loadedSections);
         setAllowedEmployees(data.form.allowedEmployees.map(emp => emp._id || emp));
       } catch (err) {
         setError(err.message);
@@ -58,8 +63,17 @@ export default function FormBuilder({ formId = null }) {
     fetchForm();
   }, [formId]);
 
-  // Question manipulation helpers
-  function addQuestion() {
+  // Sections & Question manipulation helpers
+  function addSection() {
+    const newSection = { id: Date.now(), title: '', description: '', questions: [] };
+    setSections((prevSections) => [...prevSections, newSection]);
+  }
+
+  function removeSection(sectionId) {
+    setSections((prevSections) => prevSections.filter(s => s.id !== sectionId));
+  }
+
+  function addQuestion(sectionId = activeSectionId) {
     const newQ = {
       id: 'q_' + Math.random().toString(36).substr(2, 9),
       type: 'text',
@@ -67,71 +81,68 @@ export default function FormBuilder({ formId = null }) {
       required: false,
       options: ['Option 1'],
     };
-    setQuestions([...questions, newQ]);
+    setSections((prevSections) => {
+      if (!prevSections.length) {
+        return [{ id: Date.now(), title: '', description: '', questions: [newQ] }];
+      }
+      return prevSections.map(s => (s.id === sectionId ? { ...s, questions: [...s.questions, newQ] } : s));
+    });
   }
 
-  function removeQuestion(qId) {
-    setQuestions(questions.filter((q) => q.id !== qId));
+  function removeQuestion(sectionId = activeSectionId, qId) {
+    setSections((prevSections) => prevSections.map(s => {
+      if (s.id === sectionId) return { ...s, questions: s.questions.filter(q => q.id !== qId) };
+      return s;
+    }));
   }
 
-  function updateQuestion(qId, field, value) {
-    setQuestions(
-      questions.map((q) => {
-        if (q.id === qId) {
+  function updateQuestion(sectionId = activeSectionId, qId, field, value) {
+    setSections((prevSections) => prevSections.map(s => {
+      if (s.id !== sectionId) return s;
+      return {
+        ...s,
+        questions: s.questions.map(q => {
+          if (q.id !== qId) return q;
           const updated = { ...q, [field]: value };
-          // If changing to a non-option type, clear out options to keep it clean.
-          if (field === 'type' && ['text', 'integer', 'file'].includes(value)) {
-            updated.options = [];
-          }
-          // Also clear file type specific fields if changing away from 'file'
+          if (field === 'type' && ['text', 'integer', 'file'].includes(value)) updated.options = [];
           if (field === 'type' && value !== 'file') {
             delete updated.allowedFileTypes;
             delete updated.maxFileSize;
           }
           return updated;
-        }
-        return q;
-      })
-    );
+        })
+      };
+    }));
   }
 
   // Option manipulation helpers (for dropdown, radio, checkbox)
-  function addOption(qId) {
-    setQuestions(
-      questions.map((q) => {
-        if (q.id === qId) {
-          return { ...q, options: [...q.options, `Option ${q.options.length + 1}`] };
-        }
-        return q;
-      })
-    );
+  function addOption(sectionId = activeSectionId, qId) {
+    setSections((prevSections) => prevSections.map(s => {
+      if (s.id !== sectionId) return s;
+      return { ...s, questions: s.questions.map(q => q.id === qId ? { ...q, options: [...(q.options||[]), `Option ${ (q.options||[]).length + 1}`] } : q) };
+    }));
   }
 
-  function removeOption(qId, indexToRemove) {
-    setQuestions(
-      questions.map((q) => {
-        if (q.id === qId) {
-          return {
-            ...q,
-            options: q.options.filter((_, idx) => idx !== indexToRemove),
-          };
-        }
-        return q;
-      })
-    );
+  function removeOption(sectionId = activeSectionId, qId, indexToRemove) {
+    setSections((prevSections) => prevSections.map(s => {
+      if (s.id !== sectionId) return s;
+      return { ...s, questions: s.questions.map(q => {
+        if (q.id !== qId) return q;
+        return { ...q, options: (q.options||[]).filter((_, idx) => idx !== indexToRemove) };
+      }) };
+    }));
   }
 
-  function updateOption(qId, indexToUpdate, value) {
-    setQuestions(
-      questions.map((q) => {
-        if (q.id === qId) {
-          const newOptions = [...q.options];
-          newOptions[indexToUpdate] = value;
-          return { ...q, options: newOptions };
-        }
-        return q;
-      })
-    );
+  function updateOption(sectionId = activeSectionId, qId, indexToUpdate, value) {
+    setSections((prevSections) => prevSections.map(s => {
+      if (s.id !== sectionId) return s;
+      return { ...s, questions: s.questions.map(q => {
+        if (q.id !== qId) return q;
+        const newOptions = [...(q.options||[])];
+        newOptions[indexToUpdate] = value;
+        return { ...q, options: newOptions };
+      }) };
+    }));
   }
 
   // Employee access list toggle helper
@@ -152,14 +163,16 @@ export default function FormBuilder({ formId = null }) {
       setError('Form title is required');
       return;
     }
-
-    if (questions.length === 0) {
+    
+    // Ensure at least one question across sections
+    const totalQuestions = sections.reduce((acc, s) => acc + (s.questions?.length || 0), 0);
+    if (totalQuestions === 0) {
       setError('Please add at least one question to the form');
       return;
     }
 
     // Check if any question has empty label
-    const hasEmptyLabels = questions.some((q) => !q.label.trim());
+    const hasEmptyLabels = sections.some(s => s.questions.some(q => !q.label.trim()));
     if (hasEmptyLabels) {
       setError('All questions must have a question text/label');
       return;
@@ -176,7 +189,7 @@ export default function FormBuilder({ formId = null }) {
         body: JSON.stringify({
           title,
           description,
-          questions,
+          sections,
           allowedEmployees,
         }),
       });
@@ -254,10 +267,44 @@ export default function FormBuilder({ formId = null }) {
             </div>
           </div>
 
-          {/* Dynamic Questions Canvas */}
-          {questions.map((question, qIdx) => (
-            <div key={question.id} className="card" style={{ position: 'relative' }}>
-              <div className="grid-2" style={{ gridTemplateColumns: '3fr 1fr', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+          {/* Dynamic Sections / Questions Canvas */}
+          {sections.map((section, sectionIdx) => (
+            <div key={section.id} className="card" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ fontWeight: '600', fontSize: '1rem' }}
+                  placeholder={`Section ${sectionIdx + 1} title`}
+                  value={section.title}
+                  onChange={(e) => setSections((prevSections) => prevSections.map(s => s.id === section.id ? { ...s, title: e.target.value } : s))}
+                />
+
+                {sections.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSection(section.id)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ color: 'var(--error)', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    title="Remove Section"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Section</span>
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                className="form-input"
+                style={{ fontSize: '0.925rem', resize: 'vertical', minHeight: '56px' }}
+                placeholder="Section description (optional)"
+                value={section.description}
+                onChange={(e) => setSections((prevSections) => prevSections.map(s => s.id === section.id ? { ...s, description: e.target.value } : s))}
+              />
+
+              {section.questions.map((question, qIdx) => (
+                <div key={question.id} className="card" style={{ position: 'relative' }}>
+                  <div className="grid-2" style={{ gridTemplateColumns: '3fr 1fr', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
                 {/* Question Text */}
                 <input
                   type="text"
@@ -265,7 +312,7 @@ export default function FormBuilder({ formId = null }) {
                   style={{ fontWeight: '500', fontSize: '0.95rem' }}
                   placeholder={`Question ${qIdx + 1}`}
                   value={question.label}
-                  onChange={(e) => updateQuestion(question.id, 'label', e.target.value)}
+                  onChange={(e) => updateQuestion(section.id, question.id, 'label', e.target.value)}
                 />
 
                 {/* Question Type Selection */}
@@ -273,7 +320,7 @@ export default function FormBuilder({ formId = null }) {
                   className="form-input"
                   style={{ fontSize: '0.875rem', height: '40px', padding: '0 0.5rem' }}
                   value={question.type}
-                  onChange={(e) => updateQuestion(question.id, 'type', e.target.value)}
+                  onChange={(e) => updateQuestion(section.id, question.id, 'type', e.target.value)}
                 >
                   <option value="text">Text response</option>
                   <option value="integer">Integer number</option>
@@ -298,7 +345,7 @@ export default function FormBuilder({ formId = null }) {
                         setFileTypeInputs(prev => ({ ...prev, [question.id]: e.target.value }));
                       }}
                       onBlur={(e) => {
-                        updateQuestion(question.id, 'allowedFileTypes', e.target.value.split(',').map(ext => ext.trim()).filter(Boolean));
+                        updateQuestion(section.id, question.id, 'allowedFileTypes', e.target.value.split(',').map(ext => ext.trim()).filter(Boolean));
                       }}
                     />
                   </div>
@@ -309,7 +356,7 @@ export default function FormBuilder({ formId = null }) {
                       className="form-input"
                       placeholder="e.g., 10"
                       value={question.maxFileSize || ''}
-                      onChange={(e) => updateQuestion(question.id, 'maxFileSize', e.target.value ? Number(e.target.value) : undefined)}
+                      onChange={(e) => updateQuestion(section.id, question.id, 'maxFileSize', e.target.value ? Number(e.target.value) : undefined)}
                     />
                   </div>
                 </div>
@@ -331,14 +378,14 @@ export default function FormBuilder({ formId = null }) {
                         className="form-input"
                         style={{ padding: '0.35rem 0.6rem', fontSize: '0.875rem', width: 'auto', flex: 1 }}
                         value={option}
-                        onChange={(e) => updateOption(question.id, oIdx, e.target.value)}
+                        onChange={(e) => updateOption(section.id, question.id, oIdx, e.target.value)}
                         placeholder={`Option ${oIdx + 1}`}
                       />
 
                       {question.options.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeOption(question.id, oIdx)}
+                          onClick={() => removeOption(section.id, question.id, oIdx)}
                           className="btn btn-secondary btn-sm"
                           style={{ padding: '0.35rem', border: 'none', color: 'var(--error)' }}
                           title="Remove Option"
@@ -351,7 +398,7 @@ export default function FormBuilder({ formId = null }) {
 
                   <button
                     type="button"
-                    onClick={() => addOption(question.id)}
+                    onClick={() => addOption(section.id, question.id)}
                     className="btn btn-secondary btn-sm"
                     style={{ alignSelf: 'start', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '0.8rem', padding: '4px 8px' }}
                   >
@@ -367,7 +414,7 @@ export default function FormBuilder({ formId = null }) {
                   <input
                     type="checkbox"
                     checked={question.required}
-                    onChange={(e) => updateQuestion(question.id, 'required', e.target.checked)}
+                    onChange={(e) => updateQuestion(section.id, question.id, 'required', e.target.checked)}
                     style={{ cursor: 'pointer' }}
                   />
                   <span>Required field</span>
@@ -377,7 +424,7 @@ export default function FormBuilder({ formId = null }) {
 
                 <button
                   type="button"
-                  onClick={() => removeQuestion(question.id)}
+                  onClick={() => removeQuestion(section.id, question.id)}
                   className="btn btn-secondary btn-sm"
                   style={{ color: 'var(--error)', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                   title="Remove Question"
@@ -387,17 +434,29 @@ export default function FormBuilder({ formId = null }) {
                 </button>
               </div>
             </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => addQuestion(section.id)}
+                className="btn btn-secondary"
+                style={{ borderStyle: 'dashed', borderWidth: '2px', display: 'flex', alignItems: 'center', gap: '8px', padding: '1rem' }}
+              >
+                <Plus size={18} />
+                <span>Add Question</span>
+              </button>
+            </div>
           ))}
 
-          {/* Add Question Button */}
+          {/* Add Section Button */}
           <button
             type="button"
-            onClick={addQuestion}
+            onClick={addSection}
             className="btn btn-secondary"
             style={{ borderStyle: 'dashed', borderWidth: '2px', display: 'flex', alignItems: 'center', gap: '8px', padding: '1rem' }}
           >
             <Plus size={18} />
-            <span>Add Question</span>
+            <span>Add Section</span>
           </button>
         </div>
 

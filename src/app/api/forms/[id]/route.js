@@ -3,7 +3,6 @@ import Form from '@/models/Form';
 import Response from '@/models/Response';
 import User from '@/models/User';
 import { getUserFromRequest } from '@/lib/auth';
-import { sendAdminNotification, sendUserConfirmation } from '@/lib/email';
 import { NextResponse } from 'next/server';
 
 // GET: Fetch form schema for filling (Restricted to Customers)
@@ -11,7 +10,8 @@ export async function GET(req, { params }) {
   try {
     await dbConnect();
     const user = await getUserFromRequest(req);
-    const { id } = await params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -43,7 +43,8 @@ export async function POST(req, { params }) {
   try {
     await dbConnect();
     const user = await getUserFromRequest(req);
-    const { id } = await params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -70,8 +71,11 @@ export async function POST(req, { params }) {
     // Validation
     const errors = {};
     const validatedAnswers = {};
+    
+    // Flatten the sections array to extract all questions for validation
+    const allQuestions = form.sections?.flatMap(section => section.questions || []) || [];
 
-    for (const question of form.questions) {
+    for (const question of allQuestions) {
       const value = answers[question.id];
 
       // Check required
@@ -129,7 +133,6 @@ export async function POST(req, { params }) {
       answers: validatedAnswers,
     });
     
-
     const [populatedSubmission, submitter] = await Promise.all([
       Response.findById(submission._id)
         .populate('submittedBy', 'name email')
@@ -140,14 +143,11 @@ export async function POST(req, { params }) {
         .lean(),
     ]);
 
-    await Promise.allSettled([
-      sendAdminNotification(form, populatedSubmission || submission),
-      submitter?.email ? sendUserConfirmation(submitter.email, form, validatedAnswers) : Promise.resolve(),
-    ]);
+    // await Promise.allSettled([
+    //   sendAdminNotification(form, populatedSubmission || submission),
+    //   submitter?.email ? sendUserConfirmation(submitter.email, form, validatedAnswers) : Promise.resolve(),
+    // ]);
 
-    // Return success response
-    
-    // const { getIO } = await import("@/lib/socket");
     const { getIO } = require("@/lib/socket");
     const io = getIO();
 

@@ -17,27 +17,27 @@ export default function FormResponsesPage({ params }) {
   // const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-  if (!id) return;
+    if (!id) return;
 
-  const socketInstance = io();
+    const socketInstance = io();
 
-  socketInstance.emit("join-form", id);
+    socketInstance.emit("join-form", id);
 
-  socketInstance.on("new-response", (newResponse) => {
-    setResponses((prev) => {
-      const exists = prev.some((r) => r._id === newResponse._id);
+    socketInstance.on("new-response", (newResponse) => {
+      setResponses((prev) => {
+        const exists = prev.some((r) => r._id === newResponse._id);
 
-      if (exists) return prev;
+        if (exists) return prev;
 
-      return [newResponse, ...prev];
+        return [newResponse, ...prev];
+      });
     });
-  });
 
-  return () => {
-    socketInstance.off("new-response");
-    socketInstance.disconnect();
-  };
-}, [id]);
+    return () => {
+      socketInstance.off("new-response");
+      socketInstance.disconnect();
+    };
+  }, [id]);
 
   async function fetchResponses() {
     try {
@@ -138,6 +138,9 @@ export default function FormResponsesPage({ params }) {
   }
 
   const selectedResponse = responses[selectedResponseIndex];
+  
+  // Flatten sections to get all questions in a single array to match current UI output
+  const allQuestions = form?.sections?.flatMap(section => section.questions || []) || [];
 
   return (
     <>
@@ -183,7 +186,7 @@ export default function FormResponsesPage({ params }) {
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <CheckSquare size={14} />
-              {form.questions.length} Fields
+              {allQuestions.length} Fields
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Clock size={14} />
@@ -203,7 +206,7 @@ export default function FormResponsesPage({ params }) {
         ) : activeTab === 'summary' ? (
           /* SUMMARY ANALYTICS VIEW */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {form.questions.map((question, index) => {
+            {allQuestions.map((question, index) => {
               const isMCQ = ['dropdown', 'radio', 'checkbox'].includes(question.type);
               
               return (
@@ -347,7 +350,7 @@ export default function FormResponsesPage({ params }) {
 
                 {/* Submissions QA List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  {form.questions.map((question, index) => {
+                  {allQuestions.map((question, index) => {
                     const ansVal = selectedResponse?.answers?.[question.id];
                     const isAnswered = ansVal !== undefined && ansVal !== null && ansVal !== '' && (!Array.isArray(ansVal) || ansVal.length > 0);
 
@@ -408,3 +411,4 @@ export default function FormResponsesPage({ params }) {
     </>
   );
 }
+

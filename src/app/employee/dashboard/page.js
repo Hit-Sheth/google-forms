@@ -49,7 +49,12 @@ export default function EmployeeDashboard() {
           </div>
         ) : (
           <div className="grid-2">
-            {forms.map((form) => (
+            {forms.map((form) => {
+              const totalQuestions = form.sections
+                ? form.sections.reduce((sum, sec) => sum + (sec.questions?.length || 0), 0)
+                : (form.questions?.length || 0);
+
+              return (
               <div key={form._id} className="card card-hover" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.25rem' }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
@@ -68,7 +73,7 @@ export default function EmployeeDashboard() {
                   <div style={{ display: 'flex', gap: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <FileText size={14} />
-                      {form.questions.length} questions
+                      {totalQuestions} questions
                     </span>
 
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -89,7 +94,8 @@ export default function EmployeeDashboard() {
                   </Link>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

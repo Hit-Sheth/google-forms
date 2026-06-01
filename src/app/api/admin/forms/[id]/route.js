@@ -3,12 +3,15 @@ import Form from '@/models/Form';
 import { getUserFromRequest } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
-// GET: Get form details (Admin gets all, Employee gets only if allowed)
+// GET: Get form details
 export async function GET(req, { params }) {
   try {
     await dbConnect();
     const user = await getUserFromRequest(req);
-    const { id } = await params;
+    
+    // FIX: Await params for Next.js 15 compatibility
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     if (!user || (user.role !== 'admin' && user.role !== 'employee')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
@@ -35,13 +38,16 @@ export async function PUT(req, { params }) {
   try {
     await dbConnect();
     const user = await getUserFromRequest(req);
-    const { id } = await params;
+    
+    // FIX: Await params
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { title, description, questions, allowedEmployees, active } = await req.json();
+    const { title, description, sections, allowedEmployees, active } = await req.json();
 
     const form = await Form.findById(id);
     if (!form) {
@@ -50,16 +56,13 @@ export async function PUT(req, { params }) {
 
     if (title !== undefined) form.title = title;
     if (description !== undefined) form.description = description;
-    if (questions !== undefined) form.questions = questions;
+    if (sections !== undefined) form.sections = sections;
     if (allowedEmployees !== undefined) form.allowedEmployees = allowedEmployees;
     if (active !== undefined) form.active = active;
 
     await form.save();
 
-    return NextResponse.json({
-      message: 'Form updated successfully',
-      form,
-    });
+    return NextResponse.json({ form });
   } catch (error) {
     console.error('Error updating form:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -71,7 +74,10 @@ export async function DELETE(req, { params }) {
   try {
     await dbConnect();
     const user = await getUserFromRequest(req);
-    const { id } = await params;
+    
+    // FIX: Await params
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     if (!user || user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
@@ -82,7 +88,6 @@ export async function DELETE(req, { params }) {
       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
     }
 
-    // Optionally delete all responses for this form
     const Response = (await import('@/models/Response')).default;
     await Response.deleteMany({ form: id });
 
