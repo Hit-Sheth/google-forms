@@ -1,6 +1,7 @@
 import dbConnect from '@/lib/db';
 import Form from '@/models/Form';
 import { getUserFromRequest } from '@/lib/auth';
+import { logActivity } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 
 // GET: List all forms (Admin gets all, Employee gets only allowed ones)
@@ -15,12 +16,12 @@ export async function GET(req) {
 
     let query = {};
     if (user.role === 'employee') {
-      // Employees can only view forms they have access to
-      query = { allowedEmployees: user.userId };
+      // Look for forms where this employee's ID is inside the allowedEmployees array of objects
+      query = { 'allowedEmployees.user': user.userId };
     }
 
     const forms = await Form.find(query)
-      .populate('allowedEmployees', 'name email')
+      .populate('allowedEmployees.user', 'name email')
       .sort({ createdAt: -1 });
 
     return NextResponse.json({ forms });
@@ -40,7 +41,10 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { title, description, sections, allowedEmployees, active, theme } = await req.json();
+    const { 
+      title, description, sections, allowedEmployees, 
+      settings, theme, defaultEmployeePermissions, active 
+    } = await req.json();
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -52,9 +56,22 @@ export async function POST(req) {
       creator: user.userId,
       sections: sections || [],
       allowedEmployees: allowedEmployees || [],
-      theme: theme || undefined,
+      settings: settings || {},
+      theme: theme || {},
+      defaultEmployeePermissions: defaultEmployeePermissions || {},
       active: typeof active === 'boolean' ? active : true,
     });
+
+    // Log the activity
+    if (typeof logActivity === 'function') {
+      await logActivity({
+        actorId: user.userId,
+        action: 'FORM_CREATED',
+        entityId: newForm._id,
+        entityModel: 'Form',
+        details: { title: newForm.title }
+      });
+    }
 
     return NextResponse.json({
       message: 'Form created successfully',

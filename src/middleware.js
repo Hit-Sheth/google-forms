@@ -73,8 +73,9 @@ export async function middleware(request) {
     return redirectToDashboard(user.role, request.url);
   }
 
-  // 6. Form filling route (/forms/[id]): strictly restricted to CUSTOMERS only!
-  if (isFormFillingRoute && user.role !== 'customer') {
+  // 6. Form filling route (/forms/[id]): Allow everyone through. 
+  // Granular permissions (like canSubmit) are securely handled by the API and Page logic.
+  if (isFormFillingRoute && !['customer', 'employee', 'admin'].includes(user.role)) {
     return redirectToDashboard(user.role, request.url);
   }
 

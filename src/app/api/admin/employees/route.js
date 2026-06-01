@@ -3,6 +3,7 @@ import User from '@/models/User';
 import { getUserFromRequest } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
+import { logActivity } from '@/lib/logger'; 
 
 // GET: List all employees and customers for search/promotion
 export async function GET(req) {
@@ -70,6 +71,16 @@ export async function POST(req) {
       email: email.toLowerCase(),
       password: hashedPassword,
       role: 'employee',
+    });
+
+    const actorId = adminUser.userId || adminUser._id; 
+
+    await logActivity({
+      actorId: actorId, // Use the unified variable
+      action: 'EMPLOYEE_CREATED',
+      entityId: employee._id,
+      entityModel: 'User',
+      details: { name, email }
     });
 
     return NextResponse.json(

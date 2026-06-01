@@ -45,10 +45,30 @@ export default function FillFormPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [serverError, setServerError] = useState('');
+  
+  // To handle Employee vs Customer routing
+  const [userRole, setUserRole] = useState('customer');
 
   // Pagination state for sections
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+
+  // Fetch User Role
+  useEffect(() => {
+    async function fetchRole() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user?.role) setUserRole(data.user.role);
+        }
+      } catch (err) {
+        // Ignore, defaults to customer
+      }
+    }
+    fetchRole();
+  }, []);
 
   useEffect(() => {
     async function fetchForm() {
@@ -61,7 +81,6 @@ export default function FillFormPage({ params }) {
         setForm(data.form);
         
         const initialAnswers = {};
-        // Iterate through sections and their nested questions
         data.form.sections?.forEach((section) => {
           section.questions?.forEach((q) => {
             if (q.type === 'checkbox') {
@@ -97,7 +116,7 @@ export default function FillFormPage({ params }) {
 
     setErrors((prev) => ({ ...prev, [qId]: '' }));
 
-    const maxFileSize = (question.maxFileSize || 10) * 1024 * 1024; // in bytes
+    const maxFileSize = (question.maxFileSize || 10) * 1024 * 1024; 
     if (file.size > maxFileSize) {
       setErrors((prev) => ({ ...prev, [qId]: `File size cannot exceed ${question.maxFileSize || 10}MB.` }));
       return;
@@ -121,7 +140,6 @@ export default function FillFormPage({ params }) {
     handleInputChange(qId, newVal);
   }
 
-  // Validates ONLY the current active section before allowing "Next"
   function validateCurrentSection() {
     const currentSection = form.sections[currentSectionIndex];
     if (!currentSection || !currentSection.questions) return true;
@@ -154,7 +172,6 @@ export default function FillFormPage({ params }) {
         }
       }
       
-      // Keep existing file errors if they exist (size/type mismatch)
       if (errors[q.id] && q.type === 'file' && !validationErrors[q.id]) {
          validationErrors[q.id] = errors[q.id];
          isValid = false;
@@ -186,20 +203,17 @@ export default function FillFormPage({ params }) {
     e.preventDefault();
     setServerError('');
     
-    // Final check on the last section before submitting
     if (!validateCurrentSection()) {
        return;
     }
     
     setSubmitting(true);
 
-    // --- File Uploading ---
     const uploadedFileUrls = { ...answers };
     for (const qId in files) {
       const file = files[qId];
       if (file) {
         try {
-          // Find the question across all sections
           const question = form.sections.flatMap(s => s.questions || []).find(q => q.id === qId);
           if (!question) continue;
 
@@ -231,7 +245,6 @@ export default function FillFormPage({ params }) {
       }
     }
 
-    // --- Form Submission ---
     try {
       const res = await fetch(`/api/forms/${id}`, {
         method: 'POST',
@@ -248,6 +261,7 @@ export default function FillFormPage({ params }) {
         throw new Error(data.error || 'Failed to submit form');
       }
 
+      setSuccessMessage(data.message || 'Form submitted successfully!');
       setSuccess(true);
     } catch (err) {
       setServerError(err.message);
@@ -255,6 +269,10 @@ export default function FillFormPage({ params }) {
       setSubmitting(false);
     }
   }
+
+  // Dynamic link based on role
+  const dashboardLink = userRole === 'employee' ? '/employee/dashboard' : '/customer/dashboard';
+  const dashboardText = userRole === 'employee' ? 'Employee Portal' : 'Customer Portal';
 
   if (loading) {
     return (
@@ -275,11 +293,9 @@ export default function FillFormPage({ params }) {
           <div className="card" style={{ maxWidth: '480px', margin: '0 auto', padding: '3rem 2rem' }}>
             <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: 'var(--error)', marginBottom: '8px' }}>Access Restricted</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-              {serverError === 'Only customers can access and fill forms' 
-                ? 'Only registered Customers are allowed to fill out and submit company forms.' 
-                : 'Form does not exist or has been deactivated.'}
+              {serverError}
             </p>
-            <Link href="/customer/dashboard" className="btn btn-primary">
+            <Link href={dashboardLink} className="btn btn-primary">
               Return to Dashboard
             </Link>
           </div>
@@ -311,12 +327,12 @@ export default function FillFormPage({ params }) {
           <div style={{ width: '100%', maxWidth: '640px' }}>
           
           <Link
-            href="/customer/dashboard"
+            href={dashboardLink}
             className="btn btn-secondary"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1.5rem', alignSelf: 'flex-start' }}
           >
             <ArrowLeft size={16} />
-            <span>Customer Portal</span>
+            <span>{dashboardText}</span>
           </Link>
 
           {headerImageUrl && (
@@ -332,15 +348,14 @@ export default function FillFormPage({ params }) {
               </div>
               <h2 style={{ fontSize: '1.4rem', fontWeight: '700', marginBottom: '0.5rem', color: 'var(--text)' }}>Submission Received!</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.75rem' }}>
-                Your responses for <strong>{form.title}</strong> have been recorded successfully. Thank you for your feedback!
+                {successMessage}
               </p>
-              <Link href="/customer/dashboard" className="btn btn-primary">
+              <Link href={dashboardLink} className="btn btn-primary">
                 Return to Portal
               </Link>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Main Form Title (Visible on all steps) */}
               <div className="card" style={{ borderTop: '8px solid var(--primary)', borderRadius: 'var(--radius-md)' }}>
                 <h1 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.5rem' }}>{form.title}</h1>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{form.description || 'No description provided.'}</p>
@@ -356,8 +371,8 @@ export default function FillFormPage({ params }) {
                 </div>
               )}
               
-              {/* Progress Indicator */}
-              {form.sections?.length > 1 && (
+              {/* Check form settings before rendering progress bar */}
+              {form.settings?.showProgressBar !== false && form.sections?.length > 1 && (
                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 4px' }}>
                     <div style={{ flex: 1, height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
                        <div style={{ height: '100%', width: `${((currentSectionIndex + 1) / form.sections.length) * 100}%`, background: 'var(--primary)', transition: 'width 0.3s ease' }}></div>
@@ -368,7 +383,6 @@ export default function FillFormPage({ params }) {
                  </div>
               )}
 
-              {/* Current Section Title & Description (if any) */}
               {currentSection && (currentSection.title || currentSection.description) && (
                  <div style={{ marginBottom: '0.5rem', padding: '0 4px' }}>
                     {currentSection.title && <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '4px' }}>{currentSection.title}</h2>}
@@ -376,7 +390,6 @@ export default function FillFormPage({ params }) {
                  </div>
               )}
 
-              {/* Render Questions for the Active Section */}
               {currentSection?.questions?.map((question) => {
                 const error = errors[question.id];
                 return (
@@ -534,7 +547,6 @@ export default function FillFormPage({ params }) {
                 );
               })}
 
-              {/* Navigation Controls */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
                  {currentSectionIndex > 0 ? (
                     <button
@@ -547,7 +559,7 @@ export default function FillFormPage({ params }) {
                        <ChevronLeft size={16} />
                        <span>Back</span>
                     </button>
-                 ) : <div></div> /* Empty div to push the next button to the right */}
+                 ) : <div></div>}
 
                  {isLastSection ? (
                     <button

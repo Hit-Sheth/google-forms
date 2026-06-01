@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Header from '@/components/Header';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, Users, Clock, Mail, CheckSquare, ListPlus, ToggleLeft, RefreshCw, FileText } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, Clock, Mail, CheckSquare, RefreshCw, FileText, Trash2, Edit2 } from 'lucide-react';
 import { io } from "socket.io-client";
 
 export default function FormResponsesPage({ params }) {
@@ -13,8 +13,10 @@ export default function FormResponsesPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('summary'); // 'summary' | 'individual'
   const [selectedResponseIndex, setSelectedResponseIndex] = useState(0);
+  
+  // Auth State
   const [userRole, setUserRole] = useState('employee');
-  // const [socket, setSocket] = useState(null);
+  const [userId, setUserId] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -26,9 +28,7 @@ export default function FormResponsesPage({ params }) {
     socketInstance.on("new-response", (newResponse) => {
       setResponses((prev) => {
         const exists = prev.some((r) => r._id === newResponse._id);
-
         if (exists) return prev;
-
         return [newResponse, ...prev];
       });
     });
@@ -58,13 +58,14 @@ export default function FormResponsesPage({ params }) {
   useEffect(() => {
     fetchResponses();
 
-    // Check user role
+    // Check user role & ID
     async function checkRole() {
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
           setUserRole(data.user.role);
+          setUserId(data.user.userId || data.user.id || data.user._id);
         }
       } catch (err) {
         console.error('Error fetching role', err);
@@ -76,7 +77,6 @@ export default function FormResponsesPage({ params }) {
   // Aggregate answer statistics for dropdown, radio, and checkbox question types
   function getQuestionStats(question) {
     const stats = {};
-    // Initialize stats for each pre-defined option
     question.options.forEach((opt) => {
       stats[opt] = 0;
     });
@@ -88,7 +88,6 @@ export default function FormResponsesPage({ params }) {
       if (ansVal === undefined || ansVal === null) return;
 
       if (Array.isArray(ansVal)) {
-        // Checkboxes multiple answers
         ansVal.forEach((val) => {
           if (stats[val] !== undefined) {
             stats[val]++;
@@ -96,7 +95,6 @@ export default function FormResponsesPage({ params }) {
           }
         });
       } else {
-        // Radio / Dropdown single answer
         if (stats[ansVal] !== undefined) {
           stats[ansVal]++;
           totalAnswers++;
@@ -105,6 +103,25 @@ export default function FormResponsesPage({ params }) {
     });
 
     return { stats, totalAnswers };
+  }
+
+  // Handle Response Deletion (Admin Only)
+  async function handleDeleteResponse(responseId) {
+    if (!confirm('Are you sure you want to permanently delete this response?')) return;
+    
+    try {
+      // We will create this API route in the next step
+      const res = await fetch(`/api/forms/${id}/responses/${responseId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setResponses(prev => prev.filter(r => r._id !== responseId));
+        setSelectedResponseIndex(0);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete response');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   if (loading) {
@@ -138,9 +155,25 @@ export default function FormResponsesPage({ params }) {
   }
 
   const selectedResponse = responses[selectedResponseIndex];
-  
-  // Flatten sections to get all questions in a single array to match current UI output
   const allQuestions = form?.sections?.flatMap(section => section.questions || []) || [];
+
+  // --- PERMISSION EVALUATION ---
+  // Admins can delete anything. Employees cannot.
+  const canDelete = userRole === 'admin';
+  let canEditThisResponse = false;
+
+  if (userRole === 'admin') {
+    canEditThisResponse = true;
+  } else if (userRole === 'employee' && selectedResponse) {
+    const empRecord = form.allowedEmployees?.find(e => e.user === userId || e.user?._id === userId);
+    if (empRecord) {
+      if (empRecord.permissions.canEditAll) {
+        canEditThisResponse = true;
+      } else if (empRecord.permissions.canEditOwn && selectedResponse.submittedBy?._id === userId) {
+        canEditThisResponse = true;
+      }
+    }
+  }
 
   return (
     <>
@@ -200,7 +233,7 @@ export default function FormResponsesPage({ params }) {
             <BarChart3 size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
             <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text)', marginBottom: '8px' }}>Waiting for submissions</h3>
             <p style={{ fontSize: '0.875rem', maxWidth: '320px', margin: '0 auto' }}>
-              No customers have submitted responses to this form yet. Once they fill it out, their data will pop up here instantly!
+              No responses have been recorded yet. Check back later!
             </p>
           </div>
         ) : activeTab === 'summary' ? (
@@ -220,7 +253,6 @@ export default function FormResponsesPage({ params }) {
                   </h3>
 
                   {isMCQ ? (
-                    /* Multiple choice horizontal progress bar graph representation */
                     (() => {
                       const { stats, totalAnswers } = getQuestionStats(question);
                       return (
@@ -246,7 +278,6 @@ export default function FormResponsesPage({ params }) {
                       );
                     })()
                   ) : (
-                    /* Scrollable lists of text/numeric responses */
                     <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
                       {responses
                         .filter((resp) => resp.answers[question.id] !== undefined && resp.answers[question.id] !== null && resp.answers[question.id] !== '')
@@ -274,7 +305,7 @@ export default function FormResponsesPage({ params }) {
                               <span style={{ wordBreak: 'break-all' }}>{resp.answers[question.id]}</span>
                             )}
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                              - {resp.submittedBy?.name || 'Customer'}
+                              - {resp.submittedBy?.name || 'Unknown User'}
                             </span>
                           </div>
                         ))}
@@ -316,7 +347,7 @@ export default function FormResponsesPage({ params }) {
                     }}
                   >
                     <span style={{ fontWeight: selectedResponseIndex === idx ? '600' : '500', fontSize: '0.875rem', color: selectedResponseIndex === idx ? 'var(--primary-hover)' : 'var(--text)' }}>
-                      {resp.submittedBy?.name || 'Customer'}
+                      {resp.submittedBy?.name || 'Unknown User'}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Clock size={10} />
@@ -330,7 +361,8 @@ export default function FormResponsesPage({ params }) {
             {/* Right response detail sheet */}
             {selectedResponse ? (
               <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {/* Submitter Metadata header */}
+                
+                {/* Submitter Metadata Header & Actions */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border)', paddingBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
                     <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Submission details</h3>
@@ -345,7 +377,29 @@ export default function FormResponsesPage({ params }) {
                       </span>
                     </div>
                   </div>
-                  <span className="badge badge-customer">Customer</span>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="badge badge-customer">Recorded Data</span>
+                    
+                    {/* Only show Edit if they have explicit permission */}
+                    {canEditThisResponse && (
+                       <button className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Edit feature coming soon">
+                         <Edit2 size={14} /> <span>Edit</span>
+                       </button>
+                    )}
+                    
+                    {/* Only show Delete if they are an Admin */}
+                    {canDelete && (
+                       <button 
+                         onClick={() => handleDeleteResponse(selectedResponse._id)} 
+                         className="btn btn-secondary btn-sm" 
+                         style={{ color: 'var(--error)', borderColor: 'var(--error)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                         title="Permanently Delete Response"
+                       >
+                         <Trash2 size={14} />
+                       </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Submissions QA List */}
@@ -411,4 +465,3 @@ export default function FormResponsesPage({ params }) {
     </>
   );
 }
-

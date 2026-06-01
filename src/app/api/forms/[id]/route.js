@@ -3,9 +3,40 @@ import Form from '@/models/Form';
 import Response from '@/models/Response';
 import User from '@/models/User';
 import { getUserFromRequest } from '@/lib/auth';
+import { logActivity } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 
-// GET: Fetch form schema for filling (Restricted to Customers)
+// Helper function to check form settings and user access
+function validateFormAccessAndSettings(form, user) {
+  // 1. Check if the form is globally active and accepting responses
+  if (!form.active || (form.settings && form.settings.isAcceptingResponses === false)) {
+    return { error: 'This form is no longer accepting responses', status: 400 };
+  }
+
+  // 2. Check time-based settings
+  const now = new Date();
+  if (form.settings?.startDate && now < new Date(form.settings.startDate)) {
+    return { error: 'This form is not yet open for responses', status: 400 };
+  }
+  if (form.settings?.endDate && now > new Date(form.settings.endDate)) {
+    return { error: 'This form has closed', status: 400 };
+  }
+
+  // 3. Check Role-Based and Granular Employee Access
+  if (user.role === 'employee') {
+    const empRecord = form.allowedEmployees.find(e => e.user.toString() === user.userId);
+    if (!empRecord || !empRecord.permissions.canSubmit) {
+      return { error: 'You do not have permission to submit this form', status: 403 };
+    }
+  } else if (user.role !== 'customer' && user.role !== 'admin') {
+    // Failsafe for unknown roles
+    return { error: 'Only customers, admins, or authorized employees can submit forms', status: 403 };
+  }
+
+  return null; // Passes all checks
+}
+
+// GET: Fetch form schema for filling
 export async function GET(req, { params }) {
   try {
     await dbConnect();
@@ -17,28 +48,26 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'customer') {
-      return NextResponse.json({ error: 'Only customers can access and fill forms' }, { status: 403 });
-    }
-
     const form = await Form.findById(id);
     if (!form) {
       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
     }
 
-    if (!form.active) {
-      return NextResponse.json({ error: 'This form is no longer active' }, { status: 400 });
+    // Run our new settings & access checks
+    const accessError = validateFormAccessAndSettings(form, user);
+    if (accessError) {
+      return NextResponse.json({ error: accessError.error }, { status: accessError.status });
     }
 
     // Return the form schema
     return NextResponse.json({ form });
   } catch (error) {
-    console.error('Error fetching form for customer:', error);
+    console.error('Error fetching form for filling:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
-// POST: Submit a form response (Restricted to Customers)
+// POST: Submit a form response
 export async function POST(req, { params }) {
   try {
     await dbConnect();
@@ -50,17 +79,23 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'customer') {
-      return NextResponse.json({ error: 'Only customers are allowed to submit responses' }, { status: 403 });
-    }
-
     const form = await Form.findById(id);
     if (!form) {
       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
     }
 
-    if (!form.active) {
-      return NextResponse.json({ error: 'This form is no longer accepting responses' }, { status: 400 });
+    // Run our new settings & access checks
+    const accessError = validateFormAccessAndSettings(form, user);
+    if (accessError) {
+      return NextResponse.json({ error: accessError.error }, { status: accessError.status });
+    }
+
+    // NEW: Enforce Limit One Response Per User
+    if (form.settings?.limitOnePerCustomer) {
+      const existingResponse = await Response.findOne({ form: id, submittedBy: user.userId });
+      if (existingResponse) {
+        return NextResponse.json({ error: 'You have already submitted a response to this form.' }, { status: 400 });
+      }
     }
 
     const { answers } = await req.json();
@@ -132,6 +167,17 @@ export async function POST(req, { params }) {
       submittedBy: user.userId,
       answers: validatedAnswers,
     });
+
+    // Log the activity
+    if (typeof logActivity === 'function') {
+      await logActivity({
+        actorId: user.userId,
+        action: 'FORM_SUBMITTED',
+        entityId: submission._id,
+        entityModel: 'Response',
+        details: { formId: form._id, title: form.title }
+      });
+    }
     
     const [populatedSubmission, submitter] = await Promise.all([
       Response.findById(submission._id)
@@ -143,11 +189,6 @@ export async function POST(req, { params }) {
         .lean(),
     ]);
 
-    // await Promise.allSettled([
-    //   sendAdminNotification(form, populatedSubmission || submission),
-    //   submitter?.email ? sendUserConfirmation(submitter.email, form, validatedAnswers) : Promise.resolve(),
-    // ]);
-
     const { getIO } = require("@/lib/socket");
     const io = getIO();
 
@@ -157,7 +198,7 @@ export async function POST(req, { params }) {
     );
 
     return NextResponse.json({
-      message: 'Form submitted successfully!',
+      message: form.settings?.confirmationMessage || 'Form submitted successfully!',
       submissionId: submission._id,
     }, { status: 201 });
   } catch (error) {

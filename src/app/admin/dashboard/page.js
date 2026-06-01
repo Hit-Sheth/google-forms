@@ -167,6 +167,10 @@ export default function AdminDashboard() {
                     <Trash2 size={12} />
                   </button>
                 </div>
+                // Add this inside the Admin Dashboard header area:
+<Link href="/admin/logs" className="btn btn-secondary">
+  View Activity Logs
+</Link>
               </div>
             ))}
           </div>
