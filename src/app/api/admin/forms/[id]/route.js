@@ -47,7 +47,7 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { title, description, sections, allowedEmployees, active } = await req.json();
+    const { title, description, sections, allowedEmployees, active, theme } = await req.json();
 
     const form = await Form.findById(id);
     if (!form) {
@@ -58,6 +58,7 @@ export async function PUT(req, { params }) {
     if (description !== undefined) form.description = description;
     if (sections !== undefined) form.sections = sections;
     if (allowedEmployees !== undefined) form.allowedEmployees = allowedEmployees;
+    if (theme !== undefined) form.theme = theme;
     if (active !== undefined) form.active = active;
 
     await form.save();

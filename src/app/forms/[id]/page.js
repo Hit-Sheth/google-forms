@@ -5,6 +5,22 @@ import Header from '@/components/Header';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, RefreshCw, AlertCircle, UploadCloud, File as FileIcon, ChevronRight, ChevronLeft } from 'lucide-react';
 
+const defaultTheme = {
+  headerImage: '',
+  primaryColor: '#6366f1',
+  backgroundColor: '#f8fafc',
+  fontFamily: 'Inter, sans-serif',
+};
+
+function withAlpha(hex, alphaHex) {
+  if (typeof hex !== 'string') return hex;
+  const normalized = hex.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(normalized)) {
+    return `${normalized}${alphaHex}`;
+  }
+  return hex;
+}
+
 export default function FillFormPage({ params }) {
   const [id, setId] = useState(null);
   
@@ -274,12 +290,25 @@ export default function FillFormPage({ params }) {
 
   const currentSection = form?.sections?.[currentSectionIndex];
   const isLastSection = currentSectionIndex === (form?.sections?.length || 0) - 1;
+  const theme = { ...defaultTheme, ...(form?.theme || {}) };
+  const headerImage = (theme.headerImage || '').trim();
+  const headerImageUrl = headerImage
+    ? (headerImage.startsWith('http') || headerImage.startsWith('/') ? headerImage : `/${headerImage}`)
+    : '';
+  const themeStyles = {
+    '--primary': theme.primaryColor,
+    '--primary-hover': theme.primaryColor,
+    '--primary-light': withAlpha(theme.primaryColor, '1a'),
+    backgroundColor: theme.backgroundColor,
+    fontFamily: theme.fontFamily,
+  };
 
   return (
     <>
       <Header />
-      <main className="container" style={{ marginTop: '2rem', paddingBottom: '4rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={{ width: '100%', maxWidth: '640px' }}>
+      <main style={{ paddingBottom: '4rem', minHeight: '100vh', ...themeStyles }}>
+        <div className="container" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '100%', maxWidth: '640px' }}>
           
           <Link
             href="/customer/dashboard"
@@ -289,6 +318,12 @@ export default function FillFormPage({ params }) {
             <ArrowLeft size={16} />
             <span>Customer Portal</span>
           </Link>
+
+          {headerImageUrl && (
+            <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '1.25rem' }}>
+              <img src={headerImageUrl} alt="Form header" style={{ width: '100%', height: 'auto', display: 'block' }} />
+            </div>
+          )}
 
           {success ? (
             <div className="card" style={{ textAlign: 'center', padding: '3rem 2rem', borderTop: '6px solid var(--success)' }}>
@@ -538,6 +573,7 @@ export default function FillFormPage({ params }) {
               </div>
             </div>
           )}
+          </div>
         </div>
       </main>
     </>

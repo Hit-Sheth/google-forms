@@ -64,6 +64,24 @@ const FormSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
       default: [],
     },
+    theme: {
+      headerImage: {
+        type: String,
+        default: '',
+      },
+      primaryColor: {
+        type: String,
+        default: '#6366f1',
+      },
+      backgroundColor: {
+        type: String,
+        default: '#f8fafc',
+      },
+      fontFamily: {
+        type: String,
+        default: 'Inter, sans-serif',
+      },
+    },
     active: {
       type: Boolean,
       default: true,

@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Trash2, CheckCircle, ArrowLeft, Users, FileQuestion, PlusCircle, Check, GripVertical } from 'lucide-react';
 
+const defaultTheme = {
+  headerImage: '',
+  primaryColor: '#6366f1',
+  backgroundColor: '#f8fafc',
+  fontFamily: 'Inter, sans-serif',
+};
+
 export default function FormBuilder({ formId = null }) {
   const router = useRouter();
   const [title, setTitle] = useState('');
@@ -12,6 +19,7 @@ export default function FormBuilder({ formId = null }) {
   const [sections, setSections] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [allowedEmployees, setAllowedEmployees] = useState([]);
+  const [theme, setTheme] = useState(defaultTheme);
   const [loading, setLoading] = useState(!!formId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -57,6 +65,7 @@ export default function FormBuilder({ formId = null }) {
           : [{ id: Date.now(), title: '', description: '', questions: data.form.questions || [] }];
         setSections(loadedSections);
         setAllowedEmployees(data.form.allowedEmployees.map(emp => emp._id || emp));
+        setTheme({ ...defaultTheme, ...(data.form.theme || {}) });
       } catch (err) {
         setError(err.message);
       } finally {
@@ -289,6 +298,7 @@ export default function FormBuilder({ formId = null }) {
           description,
           sections,
           allowedEmployees,
+          theme,
         }),
       });
 
@@ -583,6 +593,78 @@ export default function FormBuilder({ formId = null }) {
         </div>
 
         <div style={{ position: 'sticky', top: '80px' }}>
+          <div className="card" style={{ marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileQuestion size={16} className="text-primary" />
+              <span>Theme & Branding</span>
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Primary Color</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="color"
+                    value={theme.primaryColor}
+                    onChange={(e) => setTheme((prev) => ({ ...prev, primaryColor: e.target.value }))}
+                    style={{ width: '40px', height: '32px', border: '1px solid var(--border)', borderRadius: '6px', padding: 0, background: 'none' }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={theme.primaryColor}
+                    onChange={(e) => setTheme((prev) => ({ ...prev, primaryColor: e.target.value }))}
+                    placeholder="#6366f1"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Background Color</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="color"
+                    value={theme.backgroundColor}
+                    onChange={(e) => setTheme((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                    style={{ width: '40px', height: '32px', border: '1px solid var(--border)', borderRadius: '6px', padding: 0, background: 'none' }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={theme.backgroundColor}
+                    onChange={(e) => setTheme((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                    placeholder="#f8fafc"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Font Family</label>
+                <select
+                  className="form-input"
+                  value={theme.fontFamily}
+                  onChange={(e) => setTheme((prev) => ({ ...prev, fontFamily: e.target.value }))}
+                >
+                  <option value="Inter, sans-serif">Inter (Sans)</option>
+                  <option value="Poppins, sans-serif">Poppins (Sans)</option>
+                  <option value="Roboto, sans-serif">Roboto (Sans)</option>
+                  <option value="Georgia, serif">Georgia (Serif)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Header Image URL</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="https://..."
+                  value={theme.headerImage}
+                  onChange={(e) => setTheme((prev) => ({ ...prev, headerImage: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="card">
             <h3 style={{ fontSize: '1.05rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Users size={16} className="text-primary" />
