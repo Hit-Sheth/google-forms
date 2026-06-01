@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Trash2, CheckCircle, ArrowLeft, Users, FileQuestion, PlusCircle, Check } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, ArrowLeft, Users, FileQuestion, PlusCircle, Check, GripVertical } from 'lucide-react';
 
 export default function FormBuilder({ formId = null }) {
   const router = useRouter();
@@ -18,6 +18,10 @@ export default function FormBuilder({ formId = null }) {
   const [fileTypeInputs, setFileTypeInputs] = useState({});
   const activeSectionId = sections[0]?.id;
 
+  // Drag and Drop State
+  const [draggingQuestion, setDraggingQuestion] = useState(null); // { sectionId, qIdx }
+  const [dragOverZone, setDragOverZone] = useState(null); // string id of the drop zone
+
   // Fetch employees list
   useEffect(() => {
     async function fetchEmployees() {
@@ -25,7 +29,6 @@ export default function FormBuilder({ formId = null }) {
         const res = await fetch('/api/admin/employees');
         if (res.ok) {
           const data = await res.json();
-          // Filter to only include actual employees
           const emps = data.users.filter((u) => u.role === 'employee');
           setEmployees(emps);
         }
@@ -48,7 +51,7 @@ export default function FormBuilder({ formId = null }) {
         
         setTitle(data.form.title);
         setDescription(data.form.description);
-        // If form uses sections, load them. Otherwise wrap legacy questions into one section.
+        
         const loadedSections = data.form.sections && data.form.sections.length > 0
           ? data.form.sections
           : [{ id: Date.now(), title: '', description: '', questions: data.form.questions || [] }];
@@ -63,7 +66,107 @@ export default function FormBuilder({ formId = null }) {
     fetchForm();
   }, [formId]);
 
-  // Sections & Question manipulation helpers
+  // --- Drag and Drop Handlers ---
+  function handleAutoScroll(e) {
+    const threshold = 100;
+    const scrollSpeed = 12;
+    const viewportHeight = window.innerHeight;
+
+    if (e.clientY < threshold) {
+      window.scrollBy(0, -scrollSpeed);
+    } else if (e.clientY > viewportHeight - threshold) {
+      window.scrollBy(0, scrollSpeed);
+    }
+  }
+
+  function handleDragStart(e, sectionId, qIdx) {
+    setDraggingQuestion({ sectionId, qIdx });
+    // Firefox compatibility and visual dragging
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // Store the dragging source so drop handler can identify it.
+      // Use sectionId and qIdx since questionId may not exist.
+      e.dataTransfer.setData('text/plain', JSON.stringify({ sectionId, qIdx }));
+    }
+    
+    // Add scroll listener during drag
+    window.addEventListener('dragover', handleAutoScroll);
+  }
+
+  function handleDragEnd() {
+    setDraggingQuestion(null);
+    setDragOverZone(null);
+    window.removeEventListener('dragover', handleAutoScroll);
+  }
+
+  function handleDrop(e, targetSectionId, targetQIdx) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggingQuestion) return;
+
+    const { sectionId: sourceSectionId, qIdx: sourceQIdx } = draggingQuestion;
+
+    // Prevent dropping on itself
+    if (sourceSectionId === targetSectionId && sourceQIdx === targetQIdx) {
+      handleDragEnd();
+      return;
+    }
+
+    setSections((prevSections) => {
+      // Deep copy to safely modify the array structure
+      const newSections = JSON.parse(JSON.stringify(prevSections));
+      
+      const sourceSectionIndex = newSections.findIndex(s => s.id === sourceSectionId);
+      const targetSectionIndex = newSections.findIndex(s => s.id === targetSectionId);
+      
+      // Remove the item from the source
+      const [movedItem] = newSections[sourceSectionIndex].questions.splice(sourceQIdx, 1);
+      
+      // Calculate the correct insertion index
+      let insertIdx = targetQIdx;
+      // If moving downwards within the SAME section, the target index shifts by 1 because we just removed an element above it
+      if (sourceSectionId === targetSectionId && sourceQIdx < targetQIdx) {
+        insertIdx -= 1;
+      }
+      
+      // Insert into the target
+      newSections[targetSectionIndex].questions.splice(insertIdx, 0, movedItem);
+      
+      return newSections;
+    });
+
+    handleDragEnd();
+  }
+
+  // Helper to render the interactive Drop Zones
+  function renderDropZone(sectionId, index) {
+    const zoneId = `s${sectionId}-q${index}`;
+    const isOver = dragOverZone === zoneId;
+    
+    // Don't show drop zones if we aren't actively dragging a question
+    if (!draggingQuestion) return <div style={{ height: '12px' }} />;
+
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverZone(zoneId); }}
+        onDragLeave={() => setDragOverZone(null)}
+        onDrop={(e) => handleDrop(e, sectionId, index)}
+        style={{
+          height: isOver ? '48px' : '16px',
+          background: isOver ? 'var(--primary-light)' : 'transparent',
+          border: isOver ? '2px dashed var(--primary)' : 'none',
+          borderRadius: 'var(--radius-md)',
+          transition: 'all 0.2s ease',
+          margin: '-4px 0',
+          position: 'relative',
+          zIndex: 10,
+        }}
+      />
+    );
+  }
+
+  // --- Sections & Question manipulation helpers ---
   function addSection() {
     const newSection = { id: Date.now(), title: '', description: '', questions: [] };
     setSections((prevSections) => [...prevSections, newSection]);
@@ -115,7 +218,6 @@ export default function FormBuilder({ formId = null }) {
     }));
   }
 
-  // Option manipulation helpers (for dropdown, radio, checkbox)
   function addOption(sectionId = activeSectionId, qId) {
     setSections((prevSections) => prevSections.map(s => {
       if (s.id !== sectionId) return s;
@@ -145,7 +247,6 @@ export default function FormBuilder({ formId = null }) {
     }));
   }
 
-  // Employee access list toggle helper
   function toggleEmployeeAccess(empId) {
     if (allowedEmployees.includes(empId)) {
       setAllowedEmployees(allowedEmployees.filter((id) => id !== empId));
@@ -154,7 +255,6 @@ export default function FormBuilder({ formId = null }) {
     }
   }
 
-  // Form submission handler
   async function handleSaveForm(e) {
     e.preventDefault();
     setError('');
@@ -164,14 +264,12 @@ export default function FormBuilder({ formId = null }) {
       return;
     }
     
-    // Ensure at least one question across sections
     const totalQuestions = sections.reduce((acc, s) => acc + (s.questions?.length || 0), 0);
     if (totalQuestions === 0) {
       setError('Please add at least one question to the form');
       return;
     }
 
-    // Check if any question has empty label
     const hasEmptyLabels = sections.some(s => s.questions.some(q => !q.label.trim()));
     if (hasEmptyLabels) {
       setError('All questions must have a question text/label');
@@ -218,7 +316,6 @@ export default function FormBuilder({ formId = null }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '4rem' }}>
-      {/* Top action bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link href="/admin/dashboard" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
           <ArrowLeft size={16} />
@@ -242,9 +339,8 @@ export default function FormBuilder({ formId = null }) {
       )}
 
       <div className="grid-3" style={{ gridTemplateColumns: '2fr 1fr', alignItems: 'start' }}>
-        {/* Form Creator Canvas */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Metadata Card */}
+          
           <div className="card" style={{ borderTop: '6px solid var(--primary)' }}>
             <div className="form-group" style={{ marginBottom: '1rem' }}>
               <input
@@ -267,7 +363,6 @@ export default function FormBuilder({ formId = null }) {
             </div>
           </div>
 
-          {/* Dynamic Sections / Questions Canvas */}
           {sections.map((section, sectionIdx) => (
             <div key={section.id} className="card" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
@@ -302,145 +397,173 @@ export default function FormBuilder({ formId = null }) {
                 onChange={(e) => setSections((prevSections) => prevSections.map(s => s.id === section.id ? { ...s, description: e.target.value } : s))}
               />
 
-              {section.questions.map((question, qIdx) => (
-                <div key={question.id} className="card" style={{ position: 'relative' }}>
-                  <div className="grid-2" style={{ gridTemplateColumns: '3fr 1fr', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
-                {/* Question Text */}
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ fontWeight: '500', fontSize: '0.95rem' }}
-                  placeholder={`Question ${qIdx + 1}`}
-                  value={question.label}
-                  onChange={(e) => updateQuestion(section.id, question.id, 'label', e.target.value)}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Initial Drop Zone at the top of the section */}
+                {renderDropZone(section.id, 0)}
 
-                {/* Question Type Selection */}
-                <select
-                  className="form-input"
-                  style={{ fontSize: '0.875rem', height: '40px', padding: '0 0.5rem' }}
-                  value={question.type}
-                  onChange={(e) => updateQuestion(section.id, question.id, 'type', e.target.value)}
-                >
-                  <option value="text">Text response</option>
-                  <option value="integer">Integer number</option>
-                  <option value="file">File Upload</option>
-                  <option value="dropdown">Dropdown select</option>
-                  <option value="radio">Multiple Choice (Radio)</option>
-                  <option value="checkbox">Checkboxes</option>
-                </select>
-              </div>
+                {section.questions.map((question, qIdx) => {
+                  const isDraggingThis = draggingQuestion?.sectionId === section.id && draggingQuestion?.qIdx === qIdx;
+                  
+                  return (
+                    <div key={question.id}>
+                      <div 
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, section.id, qIdx)}
+                        onDragEnd={handleDragEnd}
+                        className="card" 
+                        style={{ 
+                          position: 'relative', 
+                          opacity: isDraggingThis ? 0.4 : 1,
+                          border: isDraggingThis ? '1px dashed var(--primary)' : undefined,
+                          boxShadow: isDraggingThis ? 'none' : undefined,
+                          transform: isDraggingThis ? 'scale(0.98)' : 'scale(1)',
+                          transition: 'opacity 0.2s, transform 0.2s',
+                          cursor: 'grab' 
+                        }}
+                      >
+                        {/* Drag Handle Top Bar */}
+                        <div style={{ display: 'flex', justifyContent: 'center', margin: '-1rem -1.5rem 1rem -1.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                           <GripVertical size={20} style={{ cursor: 'grab' }} />
+                        </div>
 
-              {/* File Type Specific Options */}
-              {question.type === 'file' && (
-                <div style={{ marginLeft: '1rem', paddingLeft: '1rem', borderLeft: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Allowed File Types (comma-separated)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g., pdf, png, docx, all"
-                      value={fileTypeInputs[question.id] ?? (question.allowedFileTypes || []).join(', ')}
-                      onChange={(e) => {
-                        setFileTypeInputs(prev => ({ ...prev, [question.id]: e.target.value }));
-                      }}
-                      onBlur={(e) => {
-                        updateQuestion(section.id, question.id, 'allowedFileTypes', e.target.value.split(',').map(ext => ext.trim()).filter(Boolean));
-                      }}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Max File Size (MB)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="e.g., 10"
-                      value={question.maxFileSize || ''}
-                      onChange={(e) => updateQuestion(section.id, question.id, 'maxFileSize', e.target.value ? Number(e.target.value) : undefined)}
-                    />
-                  </div>
-                </div>
-              )}
+                        <div className="grid-2" style={{ gridTemplateColumns: '3fr 1fr', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ fontWeight: '500', fontSize: '0.95rem' }}
+                            placeholder={`Question ${qIdx + 1}`}
+                            value={question.label}
+                            onChange={(e) => updateQuestion(section.id, question.id, 'label', e.target.value)}
+                          />
 
-              {/* Options Section (If dynamic type) */}
-              {['dropdown', 'radio', 'checkbox'].includes(question.type) && (
-                <div style={{ marginLeft: '1rem', paddingLeft: '1rem', borderLeft: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.25rem' }}>
-                  {question.options.map((option, oIdx) => (
-                    <div key={oIdx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                        {question.type === 'radio' && '○'}
-                        {question.type === 'checkbox' && '□'}
-                        {question.type === 'dropdown' && `${oIdx + 1}.`}
-                      </span>
-                      
-                      <input
-                        type="text"
-                        className="form-input"
-                        style={{ padding: '0.35rem 0.6rem', fontSize: '0.875rem', width: 'auto', flex: 1 }}
-                        value={option}
-                        onChange={(e) => updateOption(section.id, question.id, oIdx, e.target.value)}
-                        placeholder={`Option ${oIdx + 1}`}
-                      />
+                          <select
+                            className="form-input"
+                            style={{ fontSize: '0.875rem', height: '40px', padding: '0 0.5rem' }}
+                            value={question.type}
+                            onChange={(e) => updateQuestion(section.id, question.id, 'type', e.target.value)}
+                          >
+                            <option value="text">Text response</option>
+                            <option value="integer">Integer number</option>
+                            <option value="file">File Upload</option>
+                            <option value="dropdown">Dropdown select</option>
+                            <option value="radio">Multiple Choice (Radio)</option>
+                            <option value="checkbox">Checkboxes</option>
+                          </select>
+                        </div>
 
-                      {question.options.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeOption(section.id, question.id, oIdx)}
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.35rem', border: 'none', color: 'var(--error)' }}
-                          title="Remove Option"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                        {question.type === 'file' && (
+                          <div style={{ marginLeft: '1rem', paddingLeft: '1rem', borderLeft: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Allowed File Types (comma-separated)</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                placeholder="e.g., pdf, png, docx, all"
+                                value={fileTypeInputs[question.id] ?? (question.allowedFileTypes || []).join(', ')}
+                                onChange={(e) => {
+                                  setFileTypeInputs(prev => ({ ...prev, [question.id]: e.target.value }));
+                                }}
+                                onBlur={(e) => {
+                                  updateQuestion(section.id, question.id, 'allowedFileTypes', e.target.value.split(',').map(ext => ext.trim()).filter(Boolean));
+                                }}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: '500' }}>Max File Size (MB)</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                placeholder="e.g., 10"
+                                value={question.maxFileSize || ''}
+                                onChange={(e) => updateQuestion(section.id, question.id, 'maxFileSize', e.target.value ? Number(e.target.value) : undefined)}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {['dropdown', 'radio', 'checkbox'].includes(question.type) && (
+                          <div style={{ marginLeft: '1rem', paddingLeft: '1rem', borderLeft: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.25rem' }}>
+                            {question.options.map((option, oIdx) => (
+                              <div key={oIdx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                  {question.type === 'radio' && '○'}
+                                  {question.type === 'checkbox' && '□'}
+                                  {question.type === 'dropdown' && `${oIdx + 1}.`}
+                                </span>
+                                
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.875rem', width: 'auto', flex: 1 }}
+                                  value={option}
+                                  onChange={(e) => updateOption(section.id, question.id, oIdx, e.target.value)}
+                                  placeholder={`Option ${oIdx + 1}`}
+                                />
+
+                                {question.options.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOption(section.id, question.id, oIdx)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '0.35rem', border: 'none', color: 'var(--error)' }}
+                                    title="Remove Option"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() => addOption(section.id, question.id)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ alignSelf: 'start', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '0.8rem', padding: '4px 8px' }}
+                            >
+                              <PlusCircle size={12} />
+                              <span>Add Option</span>
+                            </button>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', cursor: 'pointer', userSelect: 'none' }}>
+                            <input
+                              type="checkbox"
+                              checked={question.required}
+                              onChange={(e) => updateQuestion(section.id, question.id, 'required', e.target.checked)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span>Required field</span>
+                          </label>
+
+                          <div style={{ width: '1px', height: '16px', background: 'var(--border)' }}></div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeQuestion(section.id, question.id)}
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: 'var(--error)', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Remove Question"
+                          >
+                            <Trash2 size={14} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Trailing Drop Zone after the question */}
+                      {renderDropZone(section.id, qIdx + 1)}
                     </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => addOption(section.id, question.id)}
-                    className="btn btn-secondary btn-sm"
-                    style={{ alignSelf: 'start', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '0.8rem', padding: '4px 8px' }}
-                  >
-                    <PlusCircle size={12} />
-                    <span>Add Option</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Bottom Actions Card (Required toggle & delete question) */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', cursor: 'pointer', userSelect: 'none' }}>
-                  <input
-                    type="checkbox"
-                    checked={question.required}
-                    onChange={(e) => updateQuestion(section.id, question.id, 'required', e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span>Required field</span>
-                </label>
-
-                <div style={{ width: '1px', height: '16px', background: 'var(--border)' }}></div>
-
-                <button
-                  type="button"
-                  onClick={() => removeQuestion(section.id, question.id)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ color: 'var(--error)', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  title="Remove Question"
-                >
-                  <Trash2 size={14} />
-                  <span>Delete</span>
-                </button>
+                  );
+                })}
               </div>
-            </div>
-              ))}
 
               <button
                 type="button"
                 onClick={() => addQuestion(section.id)}
                 className="btn btn-secondary"
-                style={{ borderStyle: 'dashed', borderWidth: '2px', display: 'flex', alignItems: 'center', gap: '8px', padding: '1rem' }}
+                style={{ borderStyle: 'dashed', borderWidth: '2px', display: 'flex', alignItems: 'center', gap: '8px', padding: '1rem', marginTop: '0.5rem' }}
               >
                 <Plus size={18} />
                 <span>Add Question</span>
@@ -448,7 +571,6 @@ export default function FormBuilder({ formId = null }) {
             </div>
           ))}
 
-          {/* Add Section Button */}
           <button
             type="button"
             onClick={addSection}
@@ -460,7 +582,6 @@ export default function FormBuilder({ formId = null }) {
           </button>
         </div>
 
-        {/* Sidebar: Access Rights */}
         <div style={{ position: 'sticky', top: '80px' }}>
           <div className="card">
             <h3 style={{ fontSize: '1.05rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
