@@ -31,16 +31,21 @@ function escapeHtml(value) {
 
 function formatAnswer(value) {
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.map(escapeHtml).join(', ') : 'Not answered';
+    return value.length
+      ? value.map(v => escapeHtml(String(v))).join(', ')
+      : 'Not answered';
   }
 
   if (value === undefined || value === null || value === '') {
     return 'Not answered';
   }
 
-  return escapeHtml(value);
-}
+  if (typeof value === 'object') {
+    return escapeHtml(JSON.stringify(value));
+  }
 
+  return escapeHtml(String(value));
+}
 /**
  * Creates a Nodemailer transporter using OAuth2 for Gmail.
  * It handles fetching a new access token whenever needed.
@@ -117,7 +122,6 @@ export async function sendAdminNotification(form, response) {
       </div>
     </div>
   `;
-
   await sendEmail({
     to: process.env.ADMIN_EMAIL,
     subject,
@@ -134,15 +138,24 @@ export async function sendAdminNotification(form, response) {
 export async function sendUserConfirmation(userEmail, form, answers) {
   const subject = `Your response to "${form.title}"`;
 
-  const answersHtml = form.questions
+  const allQuestions = form.sections.flatMap(
+    section => section.questions
+  );
+
+  const answersHtml = allQuestions
     .map((q) => {
       const answer = answers?.[q.id];
+
       return `
-        <div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-          <p style="font-weight: bold; color: #555;">${escapeHtml(q.label)}</p>
-          <p style="color: #333; margin-left: 10px;">${formatAnswer(answer)}</p>
-        </div>
-      `;
+      <div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+        <p style="font-weight: bold; color: #555;">
+          ${escapeHtml(q.label)}
+        </p>
+        <p style="color: #333; margin-left: 10px;">
+          ${formatAnswer(answer)}
+        </p>
+      </div>
+    `;
     })
     .join('');
 
@@ -159,7 +172,6 @@ export async function sendUserConfirmation(userEmail, form, answers) {
       </div>
     </div>
   `;
-
   await sendEmail({
     to: userEmail,
     subject,
@@ -174,8 +186,8 @@ export async function sendUserConfirmation(userEmail, form, answers) {
  * @param {string} purpose - 'register' or 'reset_password'
  */
 export async function sendOTPEmail(userEmail, otpCode, purpose) {
-  const subject = purpose === 'register' 
-    ? 'Verify your New Account' 
+  const subject = purpose === 'register'
+    ? 'Verify your New Account'
     : 'Password Reset Code';
 
   const html = `

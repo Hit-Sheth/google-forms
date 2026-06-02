@@ -3,7 +3,6 @@ import Form from '@/models/Form';
 import Response from '@/models/Response';
 import User from '@/models/User';
 import { getUserFromRequest } from '@/lib/auth';
-import { logActivity } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 
 // Helper function to check form settings and user access
@@ -67,142 +66,142 @@ export async function GET(req, { params }) {
   }
 }
 
-// POST: Submit a form response
-export async function POST(req, { params }) {
-  try {
-    await dbConnect();
-    const user = await getUserFromRequest(req);
-    const resolvedParams = await params;
-    const { id } = resolvedParams;
+// // POST: Submit a form response
+// export async function POST(req, { params }) {
+//   try {
+//     await dbConnect();
+//     const user = await getUserFromRequest(req);
+//     const resolvedParams = await params;
+//     const { id } = resolvedParams;
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+//     if (!user) {
+//       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+//     }
 
-    const form = await Form.findById(id);
-    if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
-    }
+//     const form = await Form.findById(id);
+//     if (!form) {
+//       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+//     }
 
-    // Run our new settings & access checks
-    const accessError = validateFormAccessAndSettings(form, user);
-    if (accessError) {
-      return NextResponse.json({ error: accessError.error }, { status: accessError.status });
-    }
+//     // Run our new settings & access checks
+//     const accessError = validateFormAccessAndSettings(form, user);
+//     if (accessError) {
+//       return NextResponse.json({ error: accessError.error }, { status: accessError.status });
+//     }
 
-    // NEW: Enforce Limit One Response Per User
-    if (form.settings?.limitOnePerCustomer) {
-      const existingResponse = await Response.findOne({ form: id, submittedBy: user.userId });
-      if (existingResponse) {
-        return NextResponse.json({ error: 'You have already submitted a response to this form.' }, { status: 400 });
-      }
-    }
+//     // NEW: Enforce Limit One Response Per User
+//     if (form.settings?.limitOnePerCustomer) {
+//       const existingResponse = await Response.findOne({ form: id, submittedBy: user.userId });
+//       if (existingResponse) {
+//         return NextResponse.json({ error: 'You have already submitted a response to this form.' }, { status: 400 });
+//       }
+//     }
 
-    const { answers } = await req.json();
-    if (!answers) {
-      return NextResponse.json({ error: 'Answers are required' }, { status: 400 });
-    }
+//     const { answers } = await req.json();
+//     if (!answers) {
+//       return NextResponse.json({ error: 'Answers are required' }, { status: 400 });
+//     }
 
-    // Validation
-    const errors = {};
-    const validatedAnswers = {};
+//     // Validation
+//     const errors = {};
+//     const validatedAnswers = {};
     
-    // Flatten the sections array to extract all questions for validation
-    const allQuestions = form.sections?.flatMap(section => section.questions || []) || [];
+//     // Flatten the sections array to extract all questions for validation
+//     const allQuestions = form.sections?.flatMap(section => section.questions || []) || [];
 
-    for (const question of allQuestions) {
-      const value = answers[question.id];
+//     for (const question of allQuestions) {
+//       const value = answers[question.id];
 
-      // Check required
-      if (question.required) {
-        let isMissing = false;
-        if (value === undefined || value === null || value === '') {
-          isMissing = true;
-        } else if (Array.isArray(value) && value.length === 0) {
-          isMissing = true;
-        }
+//       // Check required
+//       if (question.required) {
+//         let isMissing = false;
+//         if (value === undefined || value === null || value === '') {
+//           isMissing = true;
+//         } else if (Array.isArray(value) && value.length === 0) {
+//           isMissing = true;
+//         }
         
-        if (isMissing) {
-          errors[question.id] = 'This field is required';
-          continue;
-        }
-      }
+//         if (isMissing) {
+//           errors[question.id] = 'This field is required';
+//           continue;
+//         }
+//       }
 
-      if (value !== undefined && value !== null && value !== '') {
-        // Validate type: integer
-        if (question.type === 'integer') {
-          const parsed = parseInt(value, 10);
-          if (isNaN(parsed) || String(parsed) !== String(value).trim()) {
-            errors[question.id] = 'Please enter a valid integer';
-            continue;
-          }
-          validatedAnswers[question.id] = parsed;
-        } else if (question.type === 'checkbox') {
-          // Expect array
-          if (!Array.isArray(value)) {
-            errors[question.id] = 'Invalid checkboxes value';
-            continue;
-          }
-          validatedAnswers[question.id] = value;
-        } else if (question.type === 'file') {
-          // Expect a URL string
-          if (typeof value !== 'string' || !value.startsWith('/uploads/')) {
-            errors[question.id] = 'Invalid file submission';
-            continue;
-          }
-          validatedAnswers[question.id] = value;
-        } else {
-          validatedAnswers[question.id] = value;
-        }
-      }
-    }
+//       if (value !== undefined && value !== null && value !== '') {
+//         // Validate type: integer
+//         if (question.type === 'integer') {
+//           const parsed = parseInt(value, 10);
+//           if (isNaN(parsed) || String(parsed) !== String(value).trim()) {
+//             errors[question.id] = 'Please enter a valid integer';
+//             continue;
+//           }
+//           validatedAnswers[question.id] = parsed;
+//         } else if (question.type === 'checkbox') {
+//           // Expect array
+//           if (!Array.isArray(value)) {
+//             errors[question.id] = 'Invalid checkboxes value';
+//             continue;
+//           }
+//           validatedAnswers[question.id] = value;
+//         } else if (question.type === 'file') {
+//           // Expect a URL string
+//           if (typeof value !== 'string' || !value.startsWith('/uploads/')) {
+//             errors[question.id] = 'Invalid file submission';
+//             continue;
+//           }
+//           validatedAnswers[question.id] = value;
+//         } else {
+//           validatedAnswers[question.id] = value;
+//         }
+//       }
+//     }
 
-    if (Object.keys(errors).length > 0) {
-      return NextResponse.json({ error: 'Validation failed', validationErrors: errors }, { status: 400 });
-    }
+//     if (Object.keys(errors).length > 0) {
+//       return NextResponse.json({ error: 'Validation failed', validationErrors: errors }, { status: 400 });
+//     }
 
-    // Create the response
-    const submission = await Response.create({
-      form: form._id,
-      submittedBy: user.userId,
-      answers: validatedAnswers,
-    });
+//     // Create the response
+//     const submission = await Response.create({
+//       form: form._id,
+//       submittedBy: user.userId,
+//       answers: validatedAnswers,
+//     });
 
-    // Log the activity
-    if (typeof logActivity === 'function') {
-      await logActivity({
-        actorId: user.userId,
-        action: 'FORM_SUBMITTED',
-        entityId: submission._id,
-        entityModel: 'Response',
-        details: { formId: form._id, title: form.title }
-      });
-    }
+//     // Log the activity
+//     if (typeof logActivity === 'function') {
+//       await logActivity({
+//         actorId: user.userId,
+//         action: 'FORM_SUBMITTED',
+//         entityId: submission._id,
+//         entityModel: 'Response',
+//         details: { formId: form._id, title: form.title }
+//       });
+//     }
     
-    const [populatedSubmission, submitter] = await Promise.all([
-      Response.findById(submission._id)
-        .populate('submittedBy', 'name email')
-        .lean(),
+//     const [populatedSubmission, submitter] = await Promise.all([
+//       Response.findById(submission._id)
+//         .populate('submittedBy', 'name email')
+//         .lean(),
 
-      User.findById(user.userId)
-        .select('name email')
-        .lean(),
-    ]);
+//       User.findById(user.userId)
+//         .select('name email')
+//         .lean(),
+//     ]);
 
-    const { getIO } = require("@/lib/socket");
-    const io = getIO();
+//     const { getIO } = require("@/lib/socket");
+//     const io = getIO();
 
-    io.to(id.toString()).emit(
-      "new-response",
-      populatedSubmission
-    );
+//     io.to(id.toString()).emit(
+//       "new-response",
+//       populatedSubmission
+//     );
 
-    return NextResponse.json({
-      message: form.settings?.confirmationMessage || 'Form submitted successfully!',
-      submissionId: submission._id,
-    }, { status: 201 });
-  } catch (error) {
-    console.error('Error submitting form response:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
-}
+//     return NextResponse.json({
+//       message: form.settings?.confirmationMessage || 'Form submitted successfully!',
+//       submissionId: submission._id,
+//     }, { status: 201 });
+//   } catch (error) {
+//     console.error('Error submitting form response:', error);
+//     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+//   }
+// }
