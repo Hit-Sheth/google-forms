@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/db';
-import ActivityLog from '@/models/ActivityLog';
+import ActivityLog from '@/models/DailyLogBucket';
 import { getUserFromRequest } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 

@@ -13,7 +13,7 @@ export async function DELETE(req, { params }) {
     // Await params for Next.js 15 App Router compatibility
     const resolvedParams = await params;
     
-    // Notice how we grab BOTH the form ID and the response ID from the URL path
+    // Grab both the form ID and the response ID from the URL path
     const formId = resolvedParams.id; 
     const responseId = resolvedParams.responseId;
 
@@ -36,7 +36,7 @@ export async function DELETE(req, { params }) {
     }
 
     // 4. Find and Delete the specific response
-    // We query by BOTH _id and form to ensure someone doesn't pass a random responseId to the wrong form route
+    // Query by BOTH _id and form to ensure a responseId belongs to the correct form route
     const deletedResponse = await Response.findOneAndDelete({
       _id: responseId,
       form: formId
@@ -46,20 +46,12 @@ export async function DELETE(req, { params }) {
       return NextResponse.json({ error: 'Response not found' }, { status: 404 });
     }
 
-    // 5. Log the Activity for the Audit Trail
-    if (typeof logActivity === 'function') {
-      await logActivity({
-        actorId: user.userId,
-        action: 'RESPONSE_DELETED',
-        entityId: responseId, // Storing the old ID just in case
-        entityModel: 'Response',
-        details: { 
-          formId: form._id, 
-          formTitle: form.title,
-          deletedSubmittedBy: deletedResponse.submittedBy 
-        }
-      });
-    }
+    // 5. NEW LOG FEATURE: Log response deletion directly into the daily user bucket array
+    await logActivity({
+      actorId: user.userId,
+      action: 'response_deletion',
+      entityId: responseId
+    });
 
     return NextResponse.json({
       message: 'Response successfully deleted'

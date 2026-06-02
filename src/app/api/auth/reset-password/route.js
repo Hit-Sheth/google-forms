@@ -3,6 +3,7 @@ import OTP from '@/models/OTP';
 import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
+import { logActivity } from '@/lib/logger'; // IMPORTED LOGGER
 
 export async function POST(req) {
   try {
@@ -45,6 +46,13 @@ export async function POST(req) {
 
     // 4. Delete the used OTP so it can't be used again
     await OTP.deleteOne({ _id: otpRecord._id });
+
+    // NEW LOG FEATURE: Track password reset execution inside the daily bucket
+    await logActivity({
+      actorId: user._id.toString(),
+      action: 'reset_password',
+      entityId: user._id.toString()
+    });
 
     return NextResponse.json({ message: 'Password reset successfully' }, { status: 200 });
 

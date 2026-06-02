@@ -3,6 +3,7 @@ import User from '@/models/User';
 import { signJWT } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
+import { logActivity } from '@/lib/logger'; // IMPORTED LOGGER
 
 export async function POST(req) {
   try {
@@ -40,6 +41,12 @@ export async function POST(req) {
     };
 
     const token = await signJWT(tokenPayload);
+
+    // NEW LOG FEATURE: Atomically tracking the login event inside the daily user bucket
+    await logActivity({
+      actorId: user._id.toString(),
+      action: 'login'
+    });
 
     const response = NextResponse.json({
       message: 'Logged in successfully',

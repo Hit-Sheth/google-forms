@@ -62,16 +62,12 @@ export async function POST(req) {
       active: typeof active === 'boolean' ? active : true,
     });
 
-    // Log the activity
-    if (typeof logActivity === 'function') {
-      await logActivity({
-        actorId: user.userId,
-        action: 'FORM_CREATED',
-        entityId: newForm._id,
-        entityModel: 'Form',
-        details: { title: newForm.title }
-      });
-    }
+    // NEW LOG FEATURE: Maps tracking into the form_creation bucket array inside the daily document
+    await logActivity({
+      actorId: user.userId,
+      action: 'form_creation',
+      entityId: newForm._id
+    });
 
     return NextResponse.json({
       message: 'Form created successfully',

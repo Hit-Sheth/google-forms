@@ -75,12 +75,11 @@ export async function POST(req) {
 
     const actorId = adminUser.userId || adminUser._id; 
 
+    // NEW LOG FEATURE: Cleaned to fit the new bucket structure requirements
     await logActivity({
-      actorId: actorId, // Use the unified variable
-      action: 'EMPLOYEE_CREATED',
-      entityId: employee._id,
-      entityModel: 'User',
-      details: { name, email }
+      actorId: actorId,
+      action: 'employee_creation',
+      entityId: employee._id
     });
 
     return NextResponse.json(
@@ -124,8 +123,20 @@ export async function PUT(req) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    const oldRole = user.role;
     user.role = role;
     await user.save();
+
+    const actorId = adminUser.userId || adminUser._id;
+
+    // NEW LOG FEATURE: Tracking employee promotion transitions into the daily bucket
+    if (role === 'employee' && oldRole !== 'employee') {
+      await logActivity({
+        actorId: actorId,
+        action: 'employee_promotion',
+        entityId: user._id
+      });
+    }
 
     return NextResponse.json({
       message: `User role updated successfully to ${role}`,

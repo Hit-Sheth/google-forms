@@ -36,7 +36,6 @@ export async function GET(req, { params }) {
   }
 }
 
-// PUT: Update form (Admin only , permission canEditForm must be true)
 // PUT: Update form (Admin or Authorized Employee)
 export async function PUT(req, { params }) {
   try {
@@ -45,7 +44,6 @@ export async function PUT(req, { params }) {
     const resolvedParams = await params;
     const { id } = resolvedParams;
     
-    // FIX 1: Use && instead of || 
     if (!user || (user.role !== 'admin' && user.role !== 'employee')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
@@ -60,6 +58,7 @@ export async function PUT(req, { params }) {
     if (!form) {
       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
     }
+
     // Check permission for employees
     if (user.role === 'employee') {
       const empRecord = form.allowedEmployees.find(e => e.user.toString() === user.userId);
@@ -67,9 +66,6 @@ export async function PUT(req, { params }) {
         return NextResponse.json({ error: 'You do not have permission to edit this form' }, { status: 403 });
       }
     }
-
-    // Capture original for diffing
-    const original = form.toObject({ depopulate: true });
 
     // APPLY CHANGES: Both Admins and Authorized Employees can update core structure
     if (title !== undefined) form.title = title;
@@ -80,36 +76,19 @@ export async function PUT(req, { params }) {
     if (user.role === 'admin') {
       if (allowedEmployees !== undefined) form.allowedEmployees = allowedEmployees;
       if (settings !== undefined) form.settings = settings;
-      if (theme !== undefined) form.theme = theme; // Locked to Admin
+      if (theme !== undefined) form.theme = theme; 
       if (defaultEmployeePermissions !== undefined) form.defaultEmployeePermissions = defaultEmployeePermissions;
       if (active !== undefined) form.active = active;
     }
 
-    // Build list of actually changed fields by comparing original -> after-applied (depopulated)
-    const afterApplied = form.toObject({ depopulate: true });
-    const incomingKeys = Object.keys(body || {});
-    const updatedFields = incomingKeys.filter((k) => {
-      try {
-        const o = original[k];
-        const n = afterApplied[k];
-        return JSON.stringify(o) !== JSON.stringify(n);
-      } catch (e) {
-        return true;
-      }
-    });
-
     await form.save();
 
-    // Log the update (only fields that actually changed)
-    if (typeof logActivity === 'function') {
-      await logActivity({
-        actorId: user.userId,
-        action: 'FORM_UPDATED',
-        entityId: form._id,
-        entityModel: 'Form',
-        details: { updatedFields }
-      });
-    }
+    // NEW LOG FEATURE: Log form edit interaction into the daily user bucket
+    await logActivity({
+      actorId: user.userId,
+      action: 'form_edit',
+      entityId: form._id
+    });
 
     return NextResponse.json({ form });
   } catch (error) {
@@ -138,16 +117,12 @@ export async function DELETE(req, { params }) {
     const Response = (await import('@/models/Response')).default;
     await Response.deleteMany({ form: id });
 
-    // Log the deletion
-    if (typeof logActivity === 'function') {
-      await logActivity({
-        actorId: user.userId,
-        action: 'FORM_DELETED',
-        entityId: id,
-        entityModel: 'Form',
-        details: { title: form.title }
-      });
-    }
+    // NEW LOG FEATURE: Log form deletion clean and flat into the daily user bucket
+    await logActivity({
+      actorId: user.userId,
+      action: 'form_deletion',
+      entityId: id
+    });
 
     return NextResponse.json({
       message: 'Form and all its responses deleted successfully',
