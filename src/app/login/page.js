@@ -76,7 +76,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+          <div className="form-group" style={{ marginBottom: '0.5rem' }}>
             <label className="form-label" htmlFor="password">Password</label>
             <div style={{ position: 'relative' }}>
               <KeyRound size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -91,6 +91,13 @@ export default function LoginPage() {
                 required
               />
             </div>
+          </div>
+
+          {/* ADDED: Forgot Password Link */}
+          <div style={{ textAlign: 'right', marginBottom: '1.5rem' }}>
+            <Link href="/forgot-password" style={{ fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: '500' }}>
+              Forgot Password?
+            </Link>
           </div>
 
           <button

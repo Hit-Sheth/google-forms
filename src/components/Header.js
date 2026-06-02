@@ -78,6 +78,12 @@ export default function Header() {
               >
                 Employees
               </Link>
+              <Link 
+                href="/admin/logs" 
+                className={`nav-link ${pathname === '/admin/logs' ? 'nav-link-active' : ''}`}
+              >
+                View Activity Logs
+              </Link>
             </>
           )}
 

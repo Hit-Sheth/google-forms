@@ -166,3 +166,39 @@ export async function sendUserConfirmation(userEmail, form, answers) {
     html,
   });
 }
+
+/**
+ * Sends an OTP verification email for signup or password reset.
+ * @param {string} userEmail - The email to send the OTP to.
+ * @param {string} otpCode - The 6-digit OTP code.
+ * @param {string} purpose - 'register' or 'reset_password'
+ */
+export async function sendOTPEmail(userEmail, otpCode, purpose) {
+  const subject = purpose === 'register' 
+    ? 'Verify your New Account' 
+    : 'Password Reset Code';
+
+  const html = `
+    <div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4;">
+      <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 8px; text-align: center;">
+        <h2 style="color: #333;">${subject}</h2>
+        <p style="font-size: 16px; color: #555;">Please use the following 6-digit code to complete your request.</p>
+        
+        <div style="margin: 30px 0; padding: 15px; background-color: #f0f7ff; border: 1px dashed #0066cc; border-radius: 8px; display: inline-block;">
+            <strong style="font-size: 36px; color: #0066cc; letter-spacing: 6px;">${otpCode}</strong>
+        </div>
+        
+        <p style="font-size: 14px; color: #888;">This code will expire in 5 minutes.</p>
+        <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
+        <p style="font-size: 12px; color: #aaa;">If you did not request this, please ignore this email to ensure your account remains secure.</p>
+      </div>
+    </div>
+  `;
+
+  // Uses your existing un-exported sendEmail function!
+  await sendEmail({
+    to: userEmail,
+    subject,
+    html,
+  });
+}
