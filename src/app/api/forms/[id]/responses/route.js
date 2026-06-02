@@ -58,17 +58,16 @@ export async function POST(req, { params }) {
     if (!isDraft) {
       await logActivity({
         actorId: user.userId,
-        action: 'form_submission',
+        action: 'form_submission', 
         entityId: formId
       });
 
-      // FIX 2: Safely pass defined metadata properties to email worker templates
-      // user.email comes directly from your decrypted authentication token payload
+  // ...........................................................................................................
       
-      await Promise.allSettled([
-        sendAdminNotification(form, finalResponseDocument),
-        user?.email ? sendUserConfirmation(user.email, form, answers) : Promise.resolve(),
-      ]);
+      // await Promise.allSettled([
+      //   sendAdminNotification(form, finalResponseDocument),
+      //   user?.email ? sendUserConfirmation(user.email, form, answers) : Promise.resolve(),
+      // ]);
     }
 
     return NextResponse.json(
