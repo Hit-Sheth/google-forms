@@ -160,20 +160,6 @@ export default function FormResponsesPage({ params }) {
   // --- PERMISSION EVALUATION ---
   // Admins can delete anything. Employees cannot.
   const canDelete = userRole === 'admin';
-  let canEditThisResponse = false;
-
-  if (userRole === 'admin') {
-    canEditThisResponse = true;
-  } else if (userRole === 'employee' && selectedResponse) {
-    const empRecord = form.allowedEmployees?.find(e => e.user === userId || e.user?._id === userId);
-    if (empRecord) {
-      if (empRecord.permissions.canEditAll) {
-        canEditThisResponse = true;
-      } else if (empRecord.permissions.canEditOwn && selectedResponse.submittedBy?._id === userId) {
-        canEditThisResponse = true;
-      }
-    }
-  }
 
   return (
     <>
@@ -381,12 +367,6 @@ export default function FormResponsesPage({ params }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="badge badge-customer">Recorded Data</span>
                     
-                    {/* Only show Edit if they have explicit permission */}
-                    {canEditThisResponse && (
-                       <button className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Edit feature coming soon">
-                         <Edit2 size={14} /> <span>Edit</span>
-                       </button>
-                    )}
                     
                     {/* Only show Delete if they are an Admin */}
                     {canDelete && (

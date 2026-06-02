@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, RefreshCw, AlertCircle, UploadCloud, File as FileIcon, ChevronRight, ChevronLeft } from 'lucide-react';
 
 const defaultTheme = {
@@ -22,6 +23,7 @@ function withAlpha(hex, alphaHex) {
 }
 
 export default function FillFormPage({ params }) {
+  const router = useRouter();
   const [id, setId] = useState(null);
   
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function FillFormPage({ params }) {
   const [files, setFiles] = useState({}); 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(true);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -102,6 +105,22 @@ export default function FillFormPage({ params }) {
     if (id) {
       fetchForm();
     }
+  }, [id]);
+
+  useEffect(() => {
+    async function fetchDraft() {
+      try {
+        const res = await fetch(`/api/forms/${id}/responses?draft=true`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.draft && typeof data.draft === 'object') {
+          setAnswers((prev) => ({ ...prev, ...data.draft }));
+        }
+      } catch (err) {
+        // Ignore draft fetch errors
+      }
+    }
+    if (id) fetchDraft();
   }, [id]);
 
   function handleInputChange(qId, value) {
@@ -199,15 +218,10 @@ export default function FillFormPage({ params }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function saveForm(isDraft) {
     setServerError('');
-    
-    if (!validateCurrentSection()) {
-       return;
-    }
-    
-    setSubmitting(true);
+    if (isDraft) setSavingDraft(true);
+    else setSubmitting(true);
 
     const uploadedFileUrls = { ...answers };
     for (const qId in files) {
@@ -225,20 +239,19 @@ export default function FillFormPage({ params }) {
           if (question.maxFileSize) {
             formData.append('maxFileSize', question.maxFileSize);
           }
-          
+
           const res = await fetch('/api/upload', {
             method: 'POST',
             body: formData,
           });
 
           const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || 'File upload failed');
-          }
-          uploadedFileUrls[qId] = data.url; 
+          if (!res.ok) throw new Error(data.error || 'File upload failed');
+          uploadedFileUrls[qId] = data.url;
         } catch (err) {
-          const qLabel = form.sections.flatMap(s => s.questions || []).find(q=>q.id === qId)?.label;
+          const qLabel = form.sections.flatMap(s => s.questions || []).find(q => q.id === qId)?.label;
           setServerError(`Error uploading file for question: ${qLabel}. ${err.message}`);
+          setSavingDraft(false);
           setSubmitting(false);
           return;
         }
@@ -246,10 +259,10 @@ export default function FillFormPage({ params }) {
     }
 
     try {
-      const res = await fetch(`/api/forms/${id}`, {
+      const res = await fetch(`/api/forms/${id}/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers: uploadedFileUrls }),
+        body: JSON.stringify({ answers: uploadedFileUrls, isDraft }),
       });
 
       const data = await res.json();
@@ -258,16 +271,28 @@ export default function FillFormPage({ params }) {
           setErrors(data.validationErrors);
           throw new Error('Validation failed on the server.');
         }
-        throw new Error(data.error || 'Failed to submit form');
+        throw new Error(data.error || 'Failed to save form');
       }
 
-      setSuccessMessage(data.message || 'Form submitted successfully!');
-      setSuccess(true);
+      if (isDraft) {
+        alert('Draft saved successfully! You can come back later.');
+      } else {
+        alert('Form submitted successfully!');
+        router.push(dashboardLink);
+      }
     } catch (err) {
       setServerError(err.message);
+      alert(err.message);
     } finally {
+      setSavingDraft(false);
       setSubmitting(false);
     }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!validateCurrentSection()) return;
+    await saveForm(false);
   }
 
   // Dynamic link based on role
@@ -547,41 +572,54 @@ export default function FillFormPage({ params }) {
                 );
               })}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
                  {currentSectionIndex > 0 ? (
                     <button
                        type="button"
                        onClick={handlePrevSection}
                        className="btn btn-secondary"
                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.625rem 1.25rem' }}
-                       disabled={submitting}
+                      disabled={submitting || savingDraft}
                     >
                        <ChevronLeft size={16} />
                        <span>Back</span>
                     </button>
                  ) : <div></div>}
 
-                 {isLastSection ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button
-                       type="button"
-                       onClick={handleSubmit}
-                       className="btn btn-primary"
-                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.625rem 2rem', fontSize: '0.95rem', minWidth: '140px', justifyContent: 'center' }}
-                       disabled={submitting}
+                      type="button"
+                      onClick={() => saveForm(true)}
+                      className="btn btn-secondary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.625rem 1.25rem' }}
+                      disabled={savingDraft || submitting}
                     >
-                       {submitting ? 'Submitting...' : 'Submit Answers'}
+                      {savingDraft ? 'Saving...' : 'Save as Draft'}
                     </button>
-                 ) : (
-                    <button
-                       type="button"
-                       onClick={handleNextSection}
-                       className="btn btn-primary"
-                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.625rem 1.25rem' }}
-                    >
-                       <span>Next</span>
-                       <ChevronRight size={16} />
-                    </button>
-                 )}
+
+                    {isLastSection ? (
+                      <button
+                        type="button"
+                        onClick={handleSubmit}
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.625rem 2rem', fontSize: '0.95rem', minWidth: '140px', justifyContent: 'center' }}
+                        disabled={submitting || savingDraft}
+                      >
+                        {submitting ? 'Submitting...' : 'Submit Form'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleNextSection}
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.625rem 1.25rem' }}
+                        disabled={savingDraft || submitting}
+                      >
+                        <span>Next</span>
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
+                  </div>
               </div>
             </div>
           )}

@@ -18,6 +18,7 @@ const ResponseSchema = new mongoose.Schema(
       of: mongoose.Schema.Types.Mixed,
       required: true,
     },
+    isDraft: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
